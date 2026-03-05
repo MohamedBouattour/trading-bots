@@ -212,7 +212,11 @@ export class SmartGridBot {
       this.balance * base_allocation * size_reduction_factor;
 
     const levels_to_fill = Math.max(1, Math.floor(effective_density / 2));
-    this.qty_per_order = available_capital / levels_to_fill / current_price;
+    const raw_qty = available_capital / levels_to_fill / current_price;
+
+    // Ensure the baseline order size is at least a safe margin above Binance's 5.0 min notional
+    const min_notional = 5.5;
+    this.qty_per_order = Math.max(raw_qty, min_notional / current_price);
 
     this._cancel_all_orders();
   }
@@ -257,6 +261,12 @@ export class SmartGridBot {
 
         const qty = this.qty_per_order * multiplier;
         const cost = level * qty;
+
+        // Skip placing orders below minNotional to avoid API rejection
+        if (cost < 5.2) {
+          // Adjust quantity to meet minimum if it's close, or skip. Here we just skip.
+          continue;
+        }
 
         if (this.balance >= cost && qty > 0) {
           const oid = this._next_id();
