@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import Binance from "binance-api-node";
 import { BinanceOrderExecutionService } from "./BinanceOrderExecutionService";
 
 const mockPrices = vi.fn();

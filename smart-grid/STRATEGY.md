@@ -90,20 +90,20 @@ Unlike static grid bots, this bot continuously adapts:
 
 ## 2. Configuration Parameters
 
-| Parameter               | Default | Description                                            |
-| ----------------------- | ------- | ------------------------------------------------------ |
-| `symbol`                | BTCUSDT | Trading pair                                           |
-| `initial_balance`       | 1000    | Starting USDT balance                                  |
-| `grid_density`          | 70      | Number of grid levels across the range                 |
-| `volatility_lookback`   | 48      | Number of candles to compute historical volatility (σ) |
-| `trend_period`          | 24      | SMA window for trend slope calculation                 |
-| `trend_threshold`       | 0.0006  | Minimum SMA slope to declare uptrend/downtrend         |
-| `take_profit_pct`       | 1.5%    | Default take-profit distance from entry                |
-| `stop_loss_pct`         | 5%      | Fixed stop-loss distance from entry                    |
-| `trailing_stop_pct`     | 0%      | Trailing stop activation (0 = disabled)                |
-| `martingale_factor`     | 2.5     | Size multiplier for deeper grid levels                 |
-| `max_exposure_pct`      | 80%     | Maximum portfolio % allocated to open positions        |
-| `max_drawdown_exit_pct` | 20%     | Drawdown threshold to trigger emergency liquidation    |
+| Parameter               | Default  | Description                                            |
+| ----------------------- | -------- | ------------------------------------------------------ |
+| `symbol`                | BTC/USDT | Trading pair                                           |
+| `initial_balance`       | 500.0    | Starting USDT balance                                  |
+| `grid_density`          | 100      | Number of grid levels across the range                 |
+| `volatility_lookback`   | 24       | Number of candles to compute historical volatility (σ) |
+| `trend_period`          | 200      | SMA window for trend slope calculation                 |
+| `trend_threshold`       | 0.002    | Minimum SMA slope to declare uptrend/downtrend         |
+| `take_profit_pct`       | 0.8%     | Default take-profit distance from entry                |
+| `stop_loss_pct`         | 2.0%     | Fixed stop-loss distance from entry                    |
+| `trailing_stop_pct`     | 0%       | Trailing stop activation (0 = disabled)                |
+| `martingale_factor`     | 3.0      | Size multiplier for deeper grid levels                 |
+| `max_exposure_pct`      | 60%      | Maximum portfolio % allocated to open positions        |
+| `max_drawdown_exit_pct` | 10%      | Drawdown threshold to trigger emergency liquidation    |
 
 ---
 
@@ -135,10 +135,10 @@ Unlike static grid bots, this bot continuously adapts:
 - **Period**: 14 candles
 - **Purpose**: Momentum filter to avoid buying into overbought conditions
 - **Thresholds**:
-  - `RSI < 25`: Deep oversold — buy even during crashes
-  - `RSI < 35`: Oversold — standard buy signal
-  - `RSI < 55`: Acceptable in confirmed uptrend + golden cross
-  - `RSI > 55`: **No buying** — avoid chasing
+  - `RSI < 25`: Deep oversold — buy signal even during crashes
+  - `RSI < 35`: Standard buy dip signal
+  - `RSI < 55`: Allowed during confirmed **uptrend** + **golden cross**
+  - `RSI > 55`: **No buying** (avoiding buying into resistance)
 
 ---
 
@@ -250,7 +250,7 @@ _In strong downtrends, we use fewer grid levels to avoid rapidly accumulating lo
 ```
 base_allocation       = 0.3 if is_strong_downtrend else 0.8
 size_reduction_factor = max(0.2, 1 - exposure_pct / 100)
-available_capital     = cash_balance * base_allocation * size_reduction_factor
+available_capital     = current_total_balance * base_allocation * size_reduction_factor
 levels_to_fill        = max(1, floor(effective_density / 2))
 qty_per_order         = available_capital / levels_to_fill / current_price
 ```
