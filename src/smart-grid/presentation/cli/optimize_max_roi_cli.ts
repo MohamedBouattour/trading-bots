@@ -43,7 +43,11 @@ async function main() {
   const initialBalance = parseFloat(process.env.BALANCE || "500");
   const timeframe = "1h";
 
-  const LOCAL_CSV = "btcusdt_1h.csv";
+  const symbolClean = symbol
+    .replace(/['"]/g, "")
+    .replace("/", "")
+    .toLowerCase();
+  const LOCAL_CSV = `${symbolClean}_1h.csv`;
   const localProvider = new LocalCsvMarketDataProvider(LOCAL_CSV);
   const apiProvider = new BinanceMarketDataProvider();
   const synthProvider = new SyntheticMarketDataProvider();

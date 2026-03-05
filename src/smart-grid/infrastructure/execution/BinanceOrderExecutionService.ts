@@ -12,6 +12,39 @@ export class BinanceOrderExecutionService implements IOrderExecutor {
     });
   }
 
+  private exchangeInfo: any = null;
+
+  private async getSymbolFilters(symbol: string) {
+    if (!this.exchangeInfo) {
+      this.exchangeInfo = await this.client.exchangeInfo();
+    }
+    const symbolInfo = this.exchangeInfo.symbols.find(
+      (s: any) => s.symbol === symbol,
+    );
+    if (!symbolInfo)
+      throw new Error(`Symbol ${symbol} not found in exchange info.`);
+
+    const priceFilter = symbolInfo.filters.find(
+      (f: any) => f.filterType === "PRICE_FILTER",
+    );
+    const lotSize = symbolInfo.filters.find(
+      (f: any) => f.filterType === "LOT_SIZE",
+    );
+
+    return {
+      tickSize: priceFilter?.tickSize || "0.01",
+      stepSize: lotSize?.stepSize || "0.0001",
+    };
+  }
+
+  private roundByStep(value: number, step: string): string {
+    const precision = step.indexOf("1") - step.indexOf(".");
+    const p = precision < 0 ? 0 : precision;
+    // Use floor to be safe with lot sizes
+    const factor = Math.pow(10, p);
+    return (Math.floor(value * factor) / factor).toFixed(p);
+  }
+
   async openMarketOrder(
     symbol: string,
     side: "BUY" | "SELL",
@@ -23,40 +56,96 @@ export class BinanceOrderExecutionService implements IOrderExecutor {
         `Opening ${side} order for ${symbol}. Quote Amount: ${quoteQty}`,
       );
 
-      const prices = await this.client.prices();
-      // Prices can be an object or an array depending on parameters, but usually it's an object from .prices()
-      // Let's check the type feedback again: '{ symbol: string; price: string; }[]'
-      const pricesArray = prices as unknown as {
-        symbol: string;
-        price: string;
-      }[];
-      const priceObj = pricesArray.find((p) => p.symbol === symbol);
-      const currentPrice = priceObj?.price;
-
-      if (!currentPrice) {
-        throw new Error(`Could not find price for symbol: ${symbol}`);
-      }
-      console.log(`Current price of ${symbol} is ${currentPrice}`);
-
+      // Market orders by quoteQty don't usually need precision rounding for the USDT amount,
+      // but let's keep it clean.
       const orderOptions = {
         symbol: symbol,
         side: side as unknown as OrderSide,
         type: OrderType.MARKET,
-        quoteOrderQty: String(quoteQty),
+        quoteOrderQty: quoteQty.toFixed(2),
       };
 
       if (testOnly) {
         console.log("--- TEST MODE: Sending test order ---");
-        const result = await this.client.orderTest(orderOptions);
-        console.log("Test Order Response:", result);
+        await this.client.orderTest(orderOptions);
       } else {
         console.log("--- LIVE MODE: Sending market order ---");
-        const result = await this.client.order(orderOptions);
-        console.log("Live Order Response:", result);
+        await this.client.order(orderOptions);
       }
     } catch (error) {
       console.error(`Failed to execute order:`, error);
       throw error;
+    }
+  }
+
+  async getAccountBalances(): Promise<
+    { asset: string; free: string; locked: string }[]
+  > {
+    try {
+      const info = await this.client.accountInfo();
+      return info.balances;
+    } catch (error) {
+      console.error("Failed to fetch account info:", error);
+      return [];
+    }
+  }
+
+  async placeLimitOrder(
+    symbol: string,
+    side: "BUY" | "SELL",
+    price: number,
+    quantity: number,
+    testOnly: boolean = false,
+  ): Promise<any> {
+    try {
+      const { tickSize, stepSize } = await this.getSymbolFilters(symbol);
+      const roundedPrice = this.roundByStep(price, tickSize);
+      const roundedQty = this.roundByStep(quantity, stepSize);
+
+      console.log(
+        `Placing LIMIT ${side} for ${symbol} @ ${roundedPrice} qty: ${roundedQty} (Full precision was: ${price} @ ${quantity})`,
+      );
+
+      const orderOptions = {
+        symbol: symbol,
+        side: side as unknown as OrderSide,
+        type: OrderType.LIMIT,
+        price: roundedPrice,
+        quantity: roundedQty,
+        timeInForce: "GTC" as any,
+      };
+
+      if (testOnly) {
+        console.log("--- TEST MODE: Sending test limit order ---");
+        return await this.client.orderTest(orderOptions);
+      } else {
+        console.log("--- LIVE MODE: Sending limit order ---");
+        return await this.client.order(orderOptions);
+      }
+    } catch (error) {
+      console.error(`Failed to place limit order:`, error);
+      throw error;
+    }
+  }
+
+  async cancelOrder(symbol: string, orderId: number): Promise<void> {
+    try {
+      console.log(`Cancelling order ${orderId} for ${symbol}`);
+      await this.client.cancelOrder({
+        symbol: symbol,
+        orderId: orderId,
+      });
+    } catch (error) {
+      console.error(`Failed to cancel order ${orderId}:`, error);
+    }
+  }
+
+  async getOpenOrders(symbol: string): Promise<any[]> {
+    try {
+      return await this.client.openOrders({ symbol });
+    } catch (error: any) {
+      console.error("Failed to fetch open orders:", error.message);
+      return [];
     }
   }
 }

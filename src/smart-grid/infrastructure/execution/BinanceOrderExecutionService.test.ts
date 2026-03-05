@@ -42,7 +42,7 @@ describe("BinanceOrderExecutionService", () => {
         symbol: "BTCUSDT",
         side: "BUY",
         type: "MARKET",
-        quoteOrderQty: "100",
+        quoteOrderQty: "100.00",
       }),
     );
     expect(mockOrder).not.toHaveBeenCalled();
@@ -59,17 +59,17 @@ describe("BinanceOrderExecutionService", () => {
         symbol: "BTCUSDT",
         side: "BUY",
         type: "MARKET",
-        quoteOrderQty: "100",
+        quoteOrderQty: "100.00",
       }),
     );
     expect(mockOrderTest).not.toHaveBeenCalled();
   });
 
-  it("should throw error if symbol price not found", async () => {
-    mockPrices.mockResolvedValue([{ symbol: "ETHUSDT", price: "3000" }]);
+  it("should throw error if order execution fails", async () => {
+    mockOrder.mockRejectedValue(new Error("Exchange error"));
 
     await expect(
       service.openMarketOrder("BTCUSDT", "BUY", 100),
-    ).rejects.toThrow("Could not find price for symbol: BTCUSDT");
+    ).rejects.toThrow("Exchange error");
   });
 });
