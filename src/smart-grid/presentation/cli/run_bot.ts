@@ -36,7 +36,7 @@ function getEnv(key: string): string {
 const apiKey = getEnv("API_KEY");
 const apiSecret = getEnv("SECRET_KEY");
 const symbol = process.env.ASSET || "BTC/USDT";
-const symbolNormalized = symbol.replace(/['"/]/g, "");
+const symbolNormalized = symbol.replace(/['"\/]/g, "");
 const balanceToUse = parseFloat(process.env.BALANCE || "500");
 
 async function main() {
@@ -56,14 +56,24 @@ async function main() {
     apiSecret || "dummy",
   );
 
-  // 1. Scan latest candles
+  // Derive asset / quote names from the symbol (e.g. ETHUSDT → ETH / USDT)
+  const quoteAsset = symbolNormalized.endsWith("USDT")
+    ? "USDT"
+    : symbolNormalized.substring(symbolNormalized.length - 4);
+  const asset = symbolNormalized.replace(quoteAsset, "");
+
+  // ─── 1. Fetch candles AND real balances concurrently ──────────────────────
   console.log(`Fetching latest 100 hourly candles for ${symbolNormalized}...`);
-  const candles = await marketData.getHistoricalData(
-    symbolNormalized,
-    "1h",
-    100,
-    1,
-  );
+
+  const [candles, initialBalances] = await Promise.all([
+    marketData.getHistoricalData(symbolNormalized, "1h", 100, 1),
+    executor
+      .getAccountBalances()
+      .catch(
+        (): { asset: string; free: string; locked: string }[] => [],
+      ),
+  ]);
+
   if (candles.length === 0) {
     console.log("No candles retrieved. Exiting execution.");
     return;
@@ -74,20 +84,46 @@ async function main() {
     `Latest candle: Close=${lastCandle.close}, High=${lastCandle.high}, Low=${lastCandle.low}`,
   );
 
-  // 2. Scan current positions (Mock or fetch from your Binance client directly)
-  // E.g., const accountInfo = await executor['client'].accountInfo();
+  // ─── 2. Compute REAL portfolio capital from exchange balances ─────────────
+  //
+  // Capital = free + locked quote  +  (free + locked base-asset) * current price
+  // This is the single source of truth for grid sizing — NOT the .env BALANCE.
+  const assetBalObj = initialBalances.find((b) => b.asset === asset);
+  const quoteBalObj = initialBalances.find((b) => b.asset === quoteAsset);
+
+  const freeAsset = assetBalObj ? parseFloat(assetBalObj.free) : 0;
+  const lockedAsset = assetBalObj ? parseFloat(assetBalObj.locked) : 0;
+  const freeQuote = quoteBalObj ? parseFloat(quoteBalObj.free) : 0;
+  const lockedQuote = quoteBalObj ? parseFloat(quoteBalObj.locked) : 0;
+
+  const currentPrice = lastCandle.close;
+  const realTotalCapital =
+    freeQuote + lockedQuote + (freeAsset + lockedAsset) * currentPrice;
+
+  // Fall back to env BALANCE when running in paper / test mode (no real balances)
+  const effectiveCapital = realTotalCapital > 0 ? realTotalCapital : balanceToUse;
+
+  console.log(
+    `[Capital] ${freeQuote.toFixed(2)} ${quoteAsset} free + ${lockedQuote.toFixed(2)} locked` +
+      ` | ${freeAsset.toFixed(6)} ${asset} free + ${lockedAsset.toFixed(6)} locked` +
+      ` → effectiveCapital = ${effectiveCapital.toFixed(2)} ${quoteAsset}`,
+  );
+
+  // ─── 3. Scan current positions ────────────────────────────────────────────
   console.log(
     `Scanning current positions... (this would be queried from API in production)`,
   );
 
-  // 3. Take a decision
-  // Let's instantiate SmartGridBot and run it with recent history to recover state
+  // ─── 4. Instantiate bot with REAL capital ────────────────────────────────
+  //
+  // Passing effectiveCapital ensures _rebuild_grid sizes qty_per_order correctly
+  // for what we actually own — not the stale .env BALANCE value.
   const bot = new SmartGridBot({
     symbol: symbolNormalized,
-    initial_balance: balanceToUse,
+    initial_balance: effectiveCapital,
     grid_density: parseFloat(process.env.GRID_DENSITY || "100"),
     take_profit_pct: parseFloat(process.env.TAKE_PROFIT || "0.8"),
-    qty_per_order: parseFloat(process.env.QTY_PER_ORDER || "0.0"), // 0 means dynamic sizing
+    qty_per_order: parseFloat(process.env.QTY_PER_ORDER || "0.0"),
     volatility_lookback: parseInt(process.env.VOLATILITY_LOOKBACK || "24", 10),
     trend_period: parseInt(process.env.TREND_PERIOD || "200", 10),
     trend_threshold: parseFloat(process.env.TREND_THRESHOLD || "0.002"),
@@ -123,61 +159,36 @@ async function main() {
     `Bot internal state: ${bot.positions.length} active positions, ${bot.open_orders.size} grid orders placed.`,
   );
 
-  // 4. Sync with reality: Handle manual buys or existing balances
-  try {
-    const balances = await executor.getAccountBalances();
-    const asset = symbolNormalized.replace("USDT", "");
-    const assetBalance = balances.find(
-      (b: { asset: string; free: string; locked: string }) => b.asset === asset,
+  // ─── 5. Reconcile manual buys ─────────────────────────────────────────────
+  //
+  // If real asset qty > simulated qty (e.g. manual buy), inject a tracked position.
+  const totalActualQty = freeAsset + lockedAsset;
+  const botSimulatedQty = bot.positions.reduce((sum, p) => sum + p.quantity, 0);
+  const diffQty = totalActualQty - botSimulatedQty;
+
+  if (diffQty > 0.001) {
+    console.log(
+      `[Reconciliation] Found ${diffQty.toFixed(4)} ${asset} not tracked by bot (Manual buy detected).`,
     );
-    const totalActualQty = assetBalance
-      ? parseFloat(assetBalance.free) + parseFloat(assetBalance.locked)
-      : 0;
-
-    const botSimulatedQty = bot.positions.reduce(
-      (sum, p) => sum + p.quantity,
-      0,
+    console.log(
+      `[Reconciliation] Injecting manual position into bot management...`,
     );
-    const diffQty = totalActualQty - botSimulatedQty;
 
-    // If we have more actual volume than simulated (e.g., manual buy), inject a position
-    // Use a small threshold to avoid precision dust (e.g., 0.0001 ETH)
-    if (diffQty > 0.001) {
-      console.log(
-        `[Reconciliation] Found ${diffQty.toFixed(4)} ${asset} not tracked by bot (Manual buy detected).`,
-      );
-      console.log(
-        `[Reconciliation] Injecting manual position into bot management...`,
-      );
+    const entryPrice = currentPrice;
+    const tpPrice = entryPrice * (1 + bot.take_profit_pct / 100);
+    const slPrice =
+      bot.stop_loss_pct > 0 ? entryPrice * (1 - bot.stop_loss_pct / 100) : 0;
 
-      // For manual buys, we use the current price as entry price for TP/SL calculation
-      // unless we want to be more sophisticated, but this is a good default.
-      const entryPrice = lastCandle.close;
-      const tpPrice = entryPrice * (1 + bot.take_profit_pct / 100);
-      const slPrice =
-        bot.stop_loss_pct > 0 ? entryPrice * (1 - bot.stop_loss_pct / 100) : 0;
+    bot.positions.push(
+      new Position(entryPrice, diffQty, tpPrice, slPrice, bot.trailing_stop_pct),
+    );
 
-      const manualPos = new Position(
-        entryPrice,
-        diffQty,
-        tpPrice,
-        slPrice,
-        bot.trailing_stop_pct,
-      );
-      bot.positions.push(manualPos);
-
-      console.log(
-        `[Reconciliation] Bot now managing total ${totalActualQty.toFixed(4)} ${asset}.`,
-      );
-    }
-  } catch (err) {
-    console.warn(
-      "[Reconciliation] Could not sync with exchange balances:",
-      err,
+    console.log(
+      `[Reconciliation] Bot now managing total ${totalActualQty.toFixed(4)} ${asset}.`,
     );
   }
 
-  // 5. Finalize Grid & Positions: Synchronize with Binance Limit Orders
+  // ─── 6. Synchronize Limit Orders with Binance ─────────────────────────────
   console.log("\n[Sync] Synchronizing Limit Orders with Binance...");
   try {
     const openOrders = await executor.getOpenOrders(symbolNormalized);
@@ -188,33 +199,38 @@ async function main() {
       (o: { side: "BUY" | "SELL" }) => o.side === "SELL",
     );
 
-    // --- MANAGE BUY GRID ---
-    // Target buys from bot's open_orders
+    // ── BUY GRID ──────────────────────────────────────────────────────────
     const targetBuys = Array.from(bot.open_orders.values());
 
-    // Cancel Buy orders that are no longer in the bot's grid
+    // Cancel stale buy orders that are no longer in the bot's grid
     for (const ob of buyOrders) {
-      const price = parseFloat(ob.price);
-      // If no target buy is within 0.01% of this price, cancel it
+      const price = parseFloat((ob as { price: string }).price);
       const matches = targetBuys.some(
         (tb) => Math.abs(tb.price - price) / price < 0.0001,
       );
       if (!matches) {
-        await executor.cancelOrder(symbolNormalized, ob.orderId);
+        await executor.cancelOrder(symbolNormalized, (ob as { orderId: number }).orderId);
       }
     }
 
-    // Get quote asset balance to avoid "insufficient balance" errors
-    const quoteAsset = symbolNormalized.endsWith("USDT")
-      ? "USDT"
-      : symbolNormalized.substring(symbolNormalized.length - 4);
-    const balances = await executor.getAccountBalances();
-    const quoteBalanceObj = balances.find(
+    // Refresh balances after cancellations — freed USDT is now available again
+    const freshBalances = await executor.getAccountBalances();
+    const freshQuoteObj = freshBalances.find(
       (b: { asset: string; free: string }) => b.asset === quoteAsset,
     );
-    let availableQuote = quoteBalanceObj ? parseFloat(quoteBalanceObj.free) : 0;
+    const freshAssetObj = freshBalances.find(
+      (b: { asset: string; free: string }) => b.asset === asset,
+    );
 
-    // Place missing Buy orders
+    let availableQuote = freshQuoteObj ? parseFloat(freshQuoteObj.free) : freeQuote;
+    // Track free (non-locked) asset for sell guard — locked asset is already in open sell orders
+    let availableFreeAsset = freshAssetObj ? parseFloat(freshAssetObj.free) : freeAsset;
+
+    console.log(
+      `[Sync] Available ${quoteAsset}: ${availableQuote.toFixed(2)} | Available ${asset}: ${availableFreeAsset.toFixed(6)}`,
+    );
+
+    // Place missing buy orders — skip if actual wallet can't cover the cost
     for (const tb of targetBuys) {
       const alreadyPlaced = buyOrders.some(
         (ob: { price: string }) =>
@@ -235,7 +251,7 @@ async function main() {
             "BUY",
             tb.price,
             tb.quantity,
-            false, // Live mode
+            false,
           );
           availableQuote -= cost;
         } catch (err: unknown) {
@@ -245,7 +261,7 @@ async function main() {
             err &&
             typeof err === "object" &&
             "code" in err &&
-            err.code === -2010
+            (err as { code: number }).code === -2010
           ) {
             console.warn(
               `[Sync] Insufficient balance returned from exchange. Stopping BUY grid placement.`,
@@ -256,42 +272,61 @@ async function main() {
       }
     }
 
-    // --- MANAGE SELL GRID (Take Profits) ---
-    // Target sells from bot's positions
+    // ── SELL GRID (Take Profits) ──────────────────────────────────────────
     const targetSells = bot.positions.map((p) => ({
       price: p.take_profit_price,
       quantity: p.quantity,
     }));
 
-    // Cancel Sell orders that are no longer needed
+    // Cancel sell orders no longer needed
     for (const os of sellOrders) {
-      const price = parseFloat(os.price);
+      const price = parseFloat((os as { price: string }).price);
       const matches = targetSells.some(
         (ts) => Math.abs(ts.price - price) / price < 0.0001,
       );
       if (!matches) {
-        await executor.cancelOrder(symbolNormalized, os.orderId);
+        await executor.cancelOrder(symbolNormalized, (os as { orderId: number }).orderId);
       }
     }
 
-    // Place missing Sell orders
+    // Place missing sell orders — only sell what we actually own
     for (const ts of targetSells) {
       const alreadyPlaced = sellOrders.some(
         (os: { price: string }) =>
           Math.abs(parseFloat(os.price) - ts.price) / ts.price < 0.0001,
       );
       if (!alreadyPlaced) {
+        // KEY FIX: guard against placing a SELL when we don't hold the asset
+        if (availableFreeAsset < ts.quantity - 0.000001) {
+          console.warn(
+            `[Sync] Insufficient ${asset} to place SELL at ${ts.price} (Requires ${ts.quantity.toFixed(6)}, but only ${availableFreeAsset.toFixed(6)} free). Skipping.`,
+          );
+          continue;
+        }
+
         try {
           await executor.placeLimitOrder(
             symbolNormalized,
             "SELL",
             ts.price,
             ts.quantity,
-            false, // Live mode
+            false,
           );
+          availableFreeAsset -= ts.quantity; // track remaining sellable balance
         } catch (err: unknown) {
           const errorMsg = err instanceof Error ? err.message : String(err);
           console.error(`[Sync] Failed to place SELL @ ${ts.price}:`, errorMsg);
+          if (
+            err &&
+            typeof err === "object" &&
+            "code" in err &&
+            (err as { code: number }).code === -2010
+          ) {
+            console.warn(
+              `[Sync] Insufficient asset balance returned from exchange. Stopping SELL grid placement.`,
+            );
+            break;
+          }
         }
       }
     }
