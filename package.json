@@ -1,0 +1,25 @@
+{
+  "name": "smart-grid",
+  "version": "1.0.0",
+  "description": "This report details the design, implementation, and backtesting of an enhanced, \"smart\" grid trading bot for the BTC/USDT cryptocurrency pair. The objective was to develop a more adaptive and profitable strategy, aiming for a 20-30% return over a 6-month period, by incorporating dynamic grid adjustments and trend-following mechanisms.",
+  "main": "index.js",
+  "scripts": {
+    "backtest": "ts-node src/smart-grid/presentation/cli/backtest_cli.ts",
+    "open-order": "ts-node src/smart-grid/presentation/cli/open_order_cli.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@types/node": "^25.3.3",
+    "@types/papaparse": "^5.5.2",
+    "axios": "^1.13.6",
+    "binance-api-node": "^0.13.8",
+    "dotenv": "^17.3.1",
+    "papaparse": "^5.5.3",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}
