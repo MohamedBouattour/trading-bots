@@ -1,5 +1,25 @@
-import Binance, { BinanceRest, OrderSide, OrderType } from "binance-api-node";
+import Binance, {
+  BinanceRest,
+  OrderSide,
+  OrderType,
+  TimeInForce,
+} from "binance-api-node";
 import { IOrderExecutor } from "../../ports/IOrderExecutor";
+
+interface BinanceFilter {
+  filterType: string;
+  tickSize?: string;
+  stepSize?: string;
+}
+
+interface BinanceSymbol {
+  symbol: string;
+  filters: BinanceFilter[];
+}
+
+interface BinanceExchangeInfo {
+  symbols: BinanceSymbol[];
+}
 
 export class BinanceOrderExecutionService implements IOrderExecutor {
   private client: BinanceRest;
@@ -12,23 +32,23 @@ export class BinanceOrderExecutionService implements IOrderExecutor {
     });
   }
 
-  private exchangeInfo: any = null;
+  private exchangeInfo: BinanceExchangeInfo | null = null;
 
   private async getSymbolFilters(symbol: string) {
     if (!this.exchangeInfo) {
       this.exchangeInfo = await this.client.exchangeInfo();
     }
-    const symbolInfo = this.exchangeInfo.symbols.find(
-      (s: any) => s.symbol === symbol,
+    const symbolInfo = this.exchangeInfo!.symbols.find(
+      (s: BinanceSymbol) => s.symbol === symbol,
     );
     if (!symbolInfo)
       throw new Error(`Symbol ${symbol} not found in exchange info.`);
 
     const priceFilter = symbolInfo.filters.find(
-      (f: any) => f.filterType === "PRICE_FILTER",
+      (f: BinanceFilter) => f.filterType === "PRICE_FILTER",
     );
     const lotSize = symbolInfo.filters.find(
-      (f: any) => f.filterType === "LOT_SIZE",
+      (f: BinanceFilter) => f.filterType === "LOT_SIZE",
     );
 
     return {
@@ -96,7 +116,7 @@ export class BinanceOrderExecutionService implements IOrderExecutor {
     price: number,
     quantity: number,
     testOnly: boolean = false,
-  ): Promise<any> {
+  ): Promise<unknown> {
     try {
       const { tickSize, stepSize } = await this.getSymbolFilters(symbol);
       const roundedPrice = this.roundByStep(price, tickSize);
@@ -112,7 +132,7 @@ export class BinanceOrderExecutionService implements IOrderExecutor {
         type: OrderType.LIMIT,
         price: roundedPrice,
         quantity: roundedQty,
-        timeInForce: "GTC" as any,
+        timeInForce: "GTC" as TimeInForce,
       };
 
       if (testOnly) {
@@ -140,11 +160,11 @@ export class BinanceOrderExecutionService implements IOrderExecutor {
     }
   }
 
-  async getOpenOrders(symbol: string): Promise<any[]> {
+  async getOpenOrders(symbol: string): Promise<unknown[]> {
     try {
       return await this.client.openOrders({ symbol });
-    } catch (error: any) {
-      console.error("Failed to fetch open orders:", error.message);
+    } catch (error: unknown) {
+      console.error("Failed to fetch open orders:", (error as Error).message);
       return [];
     }
   }
