@@ -1,8 +1,8 @@
-import Binance from "binance-api-node";
+import Binance, { BinanceRest, OrderSide, OrderType } from "binance-api-node";
 import { IOrderExecutor } from "../../ports/IOrderExecutor";
 
 export class BinanceOrderExecutionService implements IOrderExecutor {
-  private client: any;
+  private client: BinanceRest;
 
   constructor(apiKey: string, apiSecret: string) {
     this.client = Binance({
@@ -24,16 +24,24 @@ export class BinanceOrderExecutionService implements IOrderExecutor {
       );
 
       const prices = await this.client.prices();
-      const currentPrice = (prices as any)[symbol];
+      // Prices can be an object or an array depending on parameters, but usually it's an object from .prices()
+      // Let's check the type feedback again: '{ symbol: string; price: string; }[]'
+      const pricesArray = prices as unknown as {
+        symbol: string;
+        price: string;
+      }[];
+      const priceObj = pricesArray.find((p) => p.symbol === symbol);
+      const currentPrice = priceObj?.price;
+
       if (!currentPrice) {
         throw new Error(`Could not find price for symbol: ${symbol}`);
       }
       console.log(`Current price of ${symbol} is ${currentPrice}`);
 
-      const orderOptions: any = {
+      const orderOptions = {
         symbol: symbol,
-        side: side,
-        type: "MARKET",
+        side: side as unknown as OrderSide,
+        type: OrderType.MARKET,
         quoteOrderQty: String(quoteQty),
       };
 

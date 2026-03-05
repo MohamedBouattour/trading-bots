@@ -5,6 +5,17 @@ import { GridStrategyConfig } from "../../../models/GridStrategyConfig";
 import { IndicatorService } from "../../../shared/indicators/IndicatorService";
 import { MathUtils } from "../../../shared/utils/MathUtils";
 
+export interface BotSummary {
+  period: string;
+  duration: string;
+  initial_balance: string;
+  final_value: string;
+  total_profit: string;
+  roi_pct: string;
+  total_trades: number;
+  max_drawdown_pct: string;
+}
+
 export class SmartGridBot {
   symbol: string;
   balance: number;
@@ -18,6 +29,8 @@ export class SmartGridBot {
   stop_loss_pct: number;
   trailing_stop_pct: number;
   martingale_factor: number;
+  max_exposure_pct: number;
+  max_drawdown_exit_pct: number;
 
   private _order_counter: number = 0;
   open_orders: Map<number, Order> = new Map();
@@ -28,22 +41,29 @@ export class SmartGridBot {
   trend: "uptrend" | "downtrend" | "ranging" = "ranging";
   equity_curve: number[];
   trade_log: Trade[] = [];
+  private _peak_equity: number;
+  private _emergency_exit: boolean = false;
+  private _start_timestamp: number | null = null;
+  private _end_timestamp: number | null = null;
 
   constructor(config: GridStrategyConfig = {}) {
     this.symbol = config.symbol ?? "BTC/USDT";
-    this.initial_balance = config.initial_balance ?? 10000.0;
+    this.initial_balance = config.initial_balance ?? 500.0;
     this.balance = this.initial_balance;
-    this.grid_density = config.grid_density ?? 20;
+    this.grid_density = config.grid_density ?? 100;
     this.qty_per_order = config.qty_per_order ?? 0.0;
-    this.volatility_lookback = config.volatility_lookback ?? 72;
-    this.trend_period = config.trend_period ?? 50;
-    this.trend_threshold = config.trend_threshold ?? 0.001;
-    this.take_profit_pct = config.take_profit_pct ?? 1.5;
-    this.stop_loss_pct = config.stop_loss_pct ?? 0.0;
-    this.trailing_stop_pct = config.trailing_stop_pct ?? 0.0;
-    this.martingale_factor = config.martingale_factor ?? 1.0;
+    this.volatility_lookback = config.volatility_lookback ?? 24;
+    this.trend_period = config.trend_period ?? 200;
+    this.trend_threshold = config.trend_threshold ?? 0.002;
+    this.take_profit_pct = config.take_profit_pct ?? 0.8;
+    this.stop_loss_pct = config.stop_loss_pct ?? 2.0;
+    this.trailing_stop_pct = config.trailing_stop_pct ?? 0;
+    this.martingale_factor = config.martingale_factor ?? 3.0;
+    this.max_exposure_pct = config.max_exposure_pct ?? 60;
+    this.max_drawdown_exit_pct = config.max_drawdown_exit_pct ?? 10.0;
 
     this.equity_curve = [this.initial_balance];
+    this._peak_equity = this.initial_balance;
   }
 
   private _next_id(): number {
@@ -52,13 +72,16 @@ export class SmartGridBot {
   }
 
   public on_candle(
-    timestamp: any,
+    timestamp: number,
     open_: number,
     high: number,
     low: number,
     close: number,
     closes_history: number[],
   ): void {
+    if (this._start_timestamp === null) this._start_timestamp = timestamp;
+    this._end_timestamp = timestamp;
+
     const trend = IndicatorService.computeTrend(
       closes_history,
       this.trend_period,
@@ -69,19 +92,20 @@ export class SmartGridBot {
       this.volatility_lookback,
     );
     const sma200 = IndicatorService.computeSMA(closes_history, 200);
+    const sma50 = IndicatorService.computeSMA(closes_history, 50);
     const rsi = IndicatorService.computeRSI(closes_history, 14);
 
     this.trend = trend;
 
     // Regime detection
     const is_bull_market = close > sma200;
+    const is_golden_cross = sma50 > sma200; // medium-term bullish
     const is_strong_downtrend = trend === "downtrend" && !is_bull_market;
 
-    // Inventory management: how much of our initial balance is currently tied up in BTC?
+    // Inventory management
     const btc_held_qty = this.positions.reduce((sum, p) => sum + p.quantity, 0);
     const btc_value = btc_held_qty * close;
 
-    // Calculate funds locked in open buy orders
     let locked_balance = 0;
     for (const order of this.open_orders.values()) {
       if (order.side === "buy") {
@@ -92,25 +116,51 @@ export class SmartGridBot {
     const current_total_equity = this.balance + btc_value + locked_balance;
     const exposure_pct = (btc_value / current_total_equity) * 100;
 
+    // Track peak equity for drawdown-based exit
+    if (current_total_equity > this._peak_equity) {
+      this._peak_equity = current_total_equity;
+    }
+    const current_dd_pct =
+      ((this._peak_equity - current_total_equity) / this._peak_equity) * 100;
+
+    // Emergency de-risk: if drawdown exceeds threshold, liquidate everything
+    if (
+      this.max_drawdown_exit_pct > 0 &&
+      current_dd_pct >= this.max_drawdown_exit_pct &&
+      !this._emergency_exit
+    ) {
+      this._emergency_exit = true;
+      this._cancel_all_orders();
+      this._liquidate_all(close, timestamp, "emergency_dd_exit");
+    }
+
+    // Re-enable trading once drawdown recovers below half the threshold
+    if (
+      this._emergency_exit &&
+      current_dd_pct < this.max_drawdown_exit_pct * 0.5
+    ) {
+      this._emergency_exit = false;
+    }
+
     this._rebuild_grid(close, volatility, is_strong_downtrend, exposure_pct);
-    this._simulate_fills(timestamp, low, high, close);
+    this._simulate_fills(timestamp, low, high);
     this._manage_positions(timestamp, low, high, close, exposure_pct);
     this._cancel_stale_orders(close);
 
-    // Entry logic: "Oversold Collector"
-    // 1. Never buy if RSI > 60 (don't buy the top)
-    // 2. Only enter new grids if RSI < 40 or we are already in exposure.
-    // 3. This avoids buying at the end of a pump.
-    const is_extreme_oversold = rsi < 30;
-    const can_add_exposure = exposure_pct < 85;
-
-    let can_buy = can_add_exposure && (rsi < 40 || trend === "uptrend");
+    // ── ENTRY FILTERS ──
+    // Tighter RSI filter: only buy on real dips (RSI < 35) or confirmed uptrend
+    // Never buy if RSI > 55 (avoid buying into resistance)
+    // Respect max exposure limit
+    const can_add_exposure = exposure_pct < this.max_exposure_pct;
+    const rsi_allows =
+      rsi < 35 || (trend === "uptrend" && is_golden_cross && rsi < 55);
+    const not_in_crash = !is_strong_downtrend || rsi < 25; // only buy deep oversold in crash
+    const can_buy =
+      can_add_exposure && rsi_allows && not_in_crash && !this._emergency_exit;
 
     if (can_buy) {
-      this._place_buy_orders(close, is_strong_downtrend, exposure_pct);
+      this._place_buy_orders(close, is_strong_downtrend);
     }
-
-    // Position exit logic is handled in _manage_positions
 
     this.equity_curve.push(current_total_equity);
   }
@@ -177,7 +227,6 @@ export class SmartGridBot {
   private _place_buy_orders(
     current_price: number,
     is_strong_downtrend: boolean,
-    exposure_pct: number,
   ): void {
     const buy_levels = this.grid_levels
       .filter((lvl) => lvl < current_price)
@@ -243,16 +292,8 @@ export class SmartGridBot {
     }
   }
 
-  private _simulate_fills(
-    timestamp: any,
-    low: number,
-    high: number,
-    close: number,
-  ): void {
+  private _simulate_fills(timestamp: number, low: number, high: number): void {
     const filled_ids: number[] = [];
-    const grid_step =
-      (this.grid_upper - this.grid_lower) /
-      Math.max(1, this.grid_levels.length - 1);
 
     for (const [oid, order] of this.open_orders.entries()) {
       if (order.side === "buy" && low <= order.price && order.price <= high) {
@@ -260,16 +301,23 @@ export class SmartGridBot {
         order.fill_price = order.price;
         filled_ids.push(oid);
 
-        // Dynamic Take Profit: narrower when exposure is high to de-risk faster
-        const tp_multiplier = 1.5;
-        const tp_price =
-          order.price +
-          Math.max(
-            grid_step,
-            order.price * ((this.take_profit_pct * tp_multiplier) / 100),
-          );
+        // Take profit price — just use the configured percentage
+        const tp_price = order.price * (1 + this.take_profit_pct / 100);
 
-        const pos = new Position(order.price, order.quantity, tp_price, 0, 0);
+        // Stop loss price
+        const sl_price =
+          this.stop_loss_pct > 0
+            ? order.price * (1 - this.stop_loss_pct / 100)
+            : 0;
+
+        // Trailing stop: handled externally in _manage_positions, pass 0 to Position
+        const pos = new Position(
+          order.price,
+          order.quantity,
+          tp_price,
+          sl_price,
+          0,
+        );
         this.positions.push(pos);
         this.trade_log.push({
           timestamp: timestamp,
@@ -286,36 +334,66 @@ export class SmartGridBot {
   }
 
   private _manage_positions(
-    timestamp: any,
+    timestamp: number,
     low: number,
     high: number,
     close: number,
     exposure_pct: number,
   ): void {
     const remaining: Position[] = [];
-    const sma200 = IndicatorService.computeSMA(this.equity_curve, 200); // Using SMA of equity for trailing stop
-
-    // NEW: BEAR MARKET EXIT
-    // If we are in a strong downtrend and price is below SMA200,
-    // we should be very quick to exit even at minor profits or small losses if exposure is high.
-    const is_extreme_bear =
-      close < IndicatorService.computeSMA(this.equity_curve, 200) * 0.9; // Arbitrary crash detection
 
     for (const pos of this.positions) {
       let exited = false;
       let exit_price: number | null = null;
       let reason: string | null = null;
 
-      // Tighten TP in bear markets
+      // ── Update trailing stop: track highest price ──
+      if (high > pos.highest_price_seen) {
+        pos.highest_price_seen = high;
+      }
+
+      // ── Dynamic TP: tighten as exposure grows ──
+      // When exposure is high (>40%), use 60% of normal TP to de-risk faster
+      const exposure_tp_factor =
+        exposure_pct > 40 ? 0.6 : exposure_pct > 25 ? 0.8 : 1.0;
+      const base_tp = pos.take_profit_price;
+      const adjusted_tp_from_exposure =
+        pos.entry_price + (base_tp - pos.entry_price) * exposure_tp_factor;
+
+      // In downtrend, tighten TP to 0.8% above entry to exit quickly
       const adjusted_tp =
         this.trend === "downtrend"
-          ? pos.entry_price * 1.01
-          : pos.take_profit_price;
+          ? Math.min(pos.entry_price * 1.008, adjusted_tp_from_exposure)
+          : adjusted_tp_from_exposure;
 
+      // ── CHECK 1: Take Profit ──
       if (high >= adjusted_tp) {
-        exit_price = Math.max(high, adjusted_tp);
+        exit_price = adjusted_tp;
         reason = "take_profit";
         exited = true;
+      }
+
+      // ── CHECK 2: Stop Loss (fixed) ──
+      if (!exited && pos.stop_loss_price > 0 && low <= pos.stop_loss_price) {
+        exit_price = pos.stop_loss_price;
+        reason = "stop_loss";
+        exited = true;
+      }
+
+      // ── CHECK 3: Trailing Stop ──
+      if (
+        !exited &&
+        this.trailing_stop_pct > 0 &&
+        pos.highest_price_seen > pos.entry_price
+      ) {
+        const trail_price =
+          pos.highest_price_seen * (1 - this.trailing_stop_pct / 100);
+        // Only activate trailing stop if we're in profit
+        if (trail_price > pos.entry_price && low <= trail_price) {
+          exit_price = trail_price;
+          reason = "trailing_stop";
+          exited = true;
+        }
       }
 
       if (exited && exit_price !== null) {
@@ -336,7 +414,7 @@ export class SmartGridBot {
     this.positions = remaining;
   }
 
-  public summary(): any {
+  public summary(): BotSummary {
     const final_equity =
       this.equity_curve.length > 0
         ? this.equity_curve[this.equity_curve.length - 1]
@@ -354,7 +432,21 @@ export class SmartGridBot {
     max_dd *= 100;
 
     const sells = this.trade_log.filter((t) => t.side === "sell");
+
+    // Calculate duration
+    let duration_str = "N/A";
+    if (this._start_timestamp && this._end_timestamp) {
+      const start = new Date(this._start_timestamp);
+      const end = new Date(this._end_timestamp);
+      const diffMs = end.getTime() - start.getTime();
+      const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+      const diffMonths = (diffDays / 30.44).toFixed(1);
+      duration_str = `${diffDays} days (~${diffMonths} months)`;
+    }
+
     return {
+      period: `${new Date(this._start_timestamp ?? 0).toLocaleDateString()} to ${new Date(this._end_timestamp ?? 0).toLocaleDateString()}`,
+      duration: duration_str,
       initial_balance: Number(this.initial_balance.toFixed(2)) + " $",
       final_value: Number(final_equity.toFixed(2)) + " $",
       total_profit: Number(profit.toFixed(2)) + " $",
@@ -366,7 +458,7 @@ export class SmartGridBot {
 
   private _liquidate_all(
     current_price: number,
-    timestamp: any,
+    timestamp: number,
     reason: string,
   ): void {
     for (const pos of this.positions) {

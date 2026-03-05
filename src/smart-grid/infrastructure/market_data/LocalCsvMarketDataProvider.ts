@@ -7,10 +7,10 @@ export class LocalCsvMarketDataProvider implements IMarketDataProvider {
   constructor(private csvPath: string) {}
 
   async getHistoricalData(
-    symbol: string,
-    interval: string,
-    limit?: number,
-    months?: number,
+    _symbol: string,
+    _interval: string,
+    _limit?: number,
+    _months?: number,
   ): Promise<Candle[]> {
     if (!fs.existsSync(this.csvPath)) {
       return [];
@@ -24,9 +24,17 @@ export class LocalCsvMarketDataProvider implements IMarketDataProvider {
     });
 
     if (parsed.data && parsed.data.length > 0) {
-      return parsed.data
-        .filter((d: any) => d.timestamp)
-        .map((d: any) => ({
+      type RawCandle = {
+        timestamp: string | number;
+        open: string | number;
+        high: string | number;
+        low: string | number;
+        close: string | number;
+        volume: string | number;
+      };
+      return (parsed.data as RawCandle[])
+        .filter((d) => d.timestamp)
+        .map((d) => ({
           timestamp: Number(d.timestamp),
           open: Number(d.open),
           high: Number(d.high),

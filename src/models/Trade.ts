@@ -1,5 +1,5 @@
 export interface Trade {
-  timestamp: any;
+  timestamp: number;
   side: "buy" | "sell";
   price: number;
   quantity: number;

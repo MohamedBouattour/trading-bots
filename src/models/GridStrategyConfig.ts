@@ -10,4 +10,6 @@ export interface GridStrategyConfig {
   stop_loss_pct?: number;
   trailing_stop_pct?: number;
   martingale_factor?: number;
+  max_exposure_pct?: number;
+  max_drawdown_exit_pct?: number;
 }

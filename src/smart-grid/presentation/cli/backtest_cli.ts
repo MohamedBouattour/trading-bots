@@ -11,16 +11,18 @@ dotenv.config();
 
 const CONFIG: GridStrategyConfig = {
   symbol: process.env.ASSET?.replace(/['"]/g, "") || "BTCUSDT",
-  initial_balance: parseFloat(process.env.BALANCE || "1000.0"),
-  grid_density: 40,
+  initial_balance: parseFloat(process.env.BALANCE || "500.0"),
+  grid_density: 100,
   qty_per_order: 0.0,
-  volatility_lookback: 48,
-  trend_period: 24,
-  trend_threshold: 0.0006,
-  take_profit_pct: 1.0,
-  stop_loss_pct: 0.0,
-  trailing_stop_pct: 0.0,
-  martingale_factor: 1.15,
+  volatility_lookback: 24,
+  trend_period: 200,
+  trend_threshold: 0.002,
+  take_profit_pct: 0.8,
+  stop_loss_pct: 2,
+  trailing_stop_pct: 0,
+  martingale_factor: 3,
+  max_exposure_pct: 60,
+  max_drawdown_exit_pct: 10,
 };
 
 const LOCAL_CSV = "btcusdt_1h.csv";

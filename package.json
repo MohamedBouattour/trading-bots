@@ -4,9 +4,12 @@
   "description": "This report details the design, implementation, and backtesting of an enhanced, \"smart\" grid trading bot for the BTC/USDT cryptocurrency pair. The objective was to develop a more adaptive and profitable strategy, aiming for a 20-30% return over a 6-month period, by incorporating dynamic grid adjustments and trend-following mechanisms.",
   "main": "index.js",
   "scripts": {
+    "build": "esbuild src/smart-grid/presentation/cli/run_bot.ts --bundle --platform=node --outfile=dist/smart-grid.js",
     "backtest": "ts-node src/smart-grid/presentation/cli/backtest_cli.ts",
+    "optimize": "ts-node src/smart-grid/presentation/cli/optimize_cli.ts",
+    "optimize-roi": "ts-node src/smart-grid/presentation/cli/optimize_max_roi_cli.ts",
     "open-order": "ts-node src/smart-grid/presentation/cli/open_order_cli.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "vitest run"
   },
   "keywords": [],
   "author": "",
@@ -21,5 +24,14 @@
     "papaparse": "^5.5.3",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "esbuild": "^0.27.3",
+    "eslint": "^10.0.2",
+    "globals": "^17.4.0",
+    "jiti": "^2.6.1",
+    "typescript-eslint": "^8.56.1",
+    "vitest": "^4.0.18"
   }
 }
