@@ -69,9 +69,7 @@ async function main() {
     marketData.getHistoricalData(symbolNormalized, "1h", 100, 1),
     executor
       .getAccountBalances()
-      .catch(
-        (): { asset: string; free: string; locked: string }[] => [],
-      ),
+      .catch((): { asset: string; free: string; locked: string }[] => []),
   ]);
 
   if (candles.length === 0) {
@@ -101,17 +99,21 @@ async function main() {
     freeQuote + lockedQuote + (freeAsset + lockedAsset) * currentPrice;
 
   // Fall back to env BALANCE when running in paper / test mode (no real balances)
-  const effectiveCapital = realTotalCapital > 0 ? realTotalCapital : balanceToUse;
+  const effectiveCapital =
+    realTotalCapital > 0 ? realTotalCapital : balanceToUse;
+
+  const roi = ((effectiveCapital - balanceToUse) / balanceToUse) * 100;
+  const roiStr = `[ROI: ${roi >= 0 ? "+" : ""}${roi.toFixed(2)}% | Val: ${effectiveCapital.toFixed(2)} ${quoteAsset}]`;
 
   console.log(
-    `[Capital] ${freeQuote.toFixed(2)} ${quoteAsset} free + ${lockedQuote.toFixed(2)} locked` +
+    `${roiStr} [Capital] ${freeQuote.toFixed(2)} ${quoteAsset} free + ${lockedQuote.toFixed(2)} locked` +
       ` | ${freeAsset.toFixed(6)} ${asset} free + ${lockedAsset.toFixed(6)} locked` +
       ` → effectiveCapital = ${effectiveCapital.toFixed(2)} ${quoteAsset}`,
   );
 
   // ─── 3. Scan current positions ────────────────────────────────────────────
   console.log(
-    `Scanning current positions... (this would be queried from API in production)`,
+    `${roiStr} Scanning current positions... (this would be queried from API in production)`,
   );
 
   // ─── 4. Instantiate bot with REAL capital ────────────────────────────────
@@ -156,7 +158,7 @@ async function main() {
     closes,
   );
   console.log(
-    `Bot internal state: ${bot.positions.length} active positions, ${bot.open_orders.size} grid orders placed.`,
+    `${roiStr} Bot internal state: ${bot.positions.length} active positions, ${bot.open_orders.size} grid orders placed.`,
   );
 
   // ─── 5. Reconcile manual buys ─────────────────────────────────────────────
@@ -168,10 +170,10 @@ async function main() {
 
   if (diffQty > 0.001) {
     console.log(
-      `[Reconciliation] Found ${diffQty.toFixed(4)} ${asset} not tracked by bot (Manual buy detected).`,
+      `${roiStr} [Reconciliation] Found ${diffQty.toFixed(4)} ${asset} not tracked by bot (Manual buy detected).`,
     );
     console.log(
-      `[Reconciliation] Injecting manual position into bot management...`,
+      `${roiStr} [Reconciliation] Injecting manual position into bot management...`,
     );
 
     const entryPrice = currentPrice;
@@ -180,16 +182,36 @@ async function main() {
       bot.stop_loss_pct > 0 ? entryPrice * (1 - bot.stop_loss_pct / 100) : 0;
 
     bot.positions.push(
-      new Position(entryPrice, diffQty, tpPrice, slPrice, bot.trailing_stop_pct),
+      new Position(
+        entryPrice,
+        diffQty,
+        tpPrice,
+        slPrice,
+        bot.trailing_stop_pct,
+      ),
     );
 
     console.log(
-      `[Reconciliation] Bot now managing total ${totalActualQty.toFixed(4)} ${asset}.`,
+      `${roiStr} [Reconciliation] Bot now managing total ${totalActualQty.toFixed(4)} ${asset}.`,
     );
+  } else if (diffQty < -0.0001) {
+    console.log(
+      `${roiStr} [Reconciliation] Bot tracked ${Math.abs(diffQty).toFixed(6)} ${asset} too much (Fees/Dust). Adjusting internal positions down.`,
+    );
+    let toRemove = Math.abs(diffQty);
+    for (let i = bot.positions.length - 1; i >= 0 && toRemove > 0; i--) {
+      if (bot.positions[i].quantity > toRemove) {
+        bot.positions[i].quantity -= toRemove;
+        toRemove = 0;
+      } else {
+        toRemove -= bot.positions[i].quantity;
+        bot.positions.splice(i, 1);
+      }
+    }
   }
 
   // ─── 6. Synchronize Limit Orders with Binance ─────────────────────────────
-  console.log("\n[Sync] Synchronizing Limit Orders with Binance...");
+  console.log(`\n${roiStr} [Sync] Synchronizing Limit Orders with Binance...`);
   try {
     const openOrders = await executor.getOpenOrders(symbolNormalized);
     const buyOrders = openOrders.filter(
@@ -200,7 +222,9 @@ async function main() {
     );
 
     // ── BUY GRID ──────────────────────────────────────────────────────────
-    const targetBuys = Array.from(bot.open_orders.values());
+    const targetBuys = Array.from(bot.open_orders.values()).filter(
+      (o) => o.side === "buy",
+    );
 
     // Cancel stale buy orders that are no longer in the bot's grid
     for (const ob of buyOrders) {
@@ -209,7 +233,10 @@ async function main() {
         (tb) => Math.abs(tb.price - price) / price < 0.0001,
       );
       if (!matches) {
-        await executor.cancelOrder(symbolNormalized, (ob as { orderId: number }).orderId);
+        await executor.cancelOrder(
+          symbolNormalized,
+          (ob as { orderId: number }).orderId,
+        );
       }
     }
 
@@ -222,12 +249,16 @@ async function main() {
       (b: { asset: string; free: string }) => b.asset === asset,
     );
 
-    let availableQuote = freshQuoteObj ? parseFloat(freshQuoteObj.free) : freeQuote;
+    let availableQuote = freshQuoteObj
+      ? parseFloat(freshQuoteObj.free)
+      : freeQuote;
     // Track free (non-locked) asset for sell guard — locked asset is already in open sell orders
-    let availableFreeAsset = freshAssetObj ? parseFloat(freshAssetObj.free) : freeAsset;
+    let availableFreeAsset = freshAssetObj
+      ? parseFloat(freshAssetObj.free)
+      : freeAsset;
 
     console.log(
-      `[Sync] Available ${quoteAsset}: ${availableQuote.toFixed(2)} | Available ${asset}: ${availableFreeAsset.toFixed(6)}`,
+      `${roiStr} [Sync] Available ${quoteAsset}: ${availableQuote.toFixed(2)} | Available ${asset}: ${availableFreeAsset.toFixed(6)}`,
     );
 
     // Place missing buy orders — skip if actual wallet can't cover the cost
@@ -272,11 +303,23 @@ async function main() {
       }
     }
 
-    // ── SELL GRID (Take Profits) ──────────────────────────────────────────
-    const targetSells = bot.positions.map((p) => ({
-      price: p.take_profit_price,
-      quantity: p.quantity,
-    }));
+    // ── SELL GRID (Take Profits & Grid Sells) ─────────────────────────────
+    const targetSells: { price: number; quantity: number }[] = [];
+
+    for (const o of bot.open_orders.values()) {
+      if (o.side === "sell") {
+        targetSells.push({ price: o.price, quantity: o.quantity });
+      }
+    }
+    for (const p of bot.positions) {
+      targetSells.push({
+        price: p.take_profit_price,
+        quantity: p.quantity,
+      });
+    }
+
+    // Sort sells so that orders closest to current price fill the available balance first
+    targetSells.sort((a, b) => a.price - b.price);
 
     // Cancel sell orders no longer needed
     for (const os of sellOrders) {
@@ -285,7 +328,10 @@ async function main() {
         (ts) => Math.abs(ts.price - price) / price < 0.0001,
       );
       if (!matches) {
-        await executor.cancelOrder(symbolNormalized, (os as { orderId: number }).orderId);
+        await executor.cancelOrder(
+          symbolNormalized,
+          (os as { orderId: number }).orderId,
+        );
       }
     }
 
@@ -298,10 +344,14 @@ async function main() {
       if (!alreadyPlaced) {
         // KEY FIX: guard against placing a SELL when we don't hold the asset
         if (availableFreeAsset < ts.quantity - 0.000001) {
-          console.warn(
-            `[Sync] Insufficient ${asset} to place SELL at ${ts.price} (Requires ${ts.quantity.toFixed(6)}, but only ${availableFreeAsset.toFixed(6)} free). Skipping.`,
-          );
-          continue;
+          if (availableFreeAsset * ts.price < 5.2) {
+            console.log(
+              `[Sync] Insufficient ${asset} to place SELL at ${ts.price} (Requires ${ts.quantity.toFixed(6)}, but only ${availableFreeAsset.toFixed(6)} free). Skipping limit.`,
+            );
+            continue;
+          }
+          // Cap the sell amount to exactly what is free
+          ts.quantity = availableFreeAsset;
         }
 
         try {
@@ -331,13 +381,13 @@ async function main() {
       }
     }
 
-    console.log("[Sync] Limit order synchronization completed.");
+    console.log(`${roiStr} [Sync] Limit order synchronization completed.`);
   } catch (err) {
     console.error("[Sync] Failed to sync limit orders:", err);
   }
 
   console.log(
-    `[${new Date().toISOString()}] Bot cron execution finished successfully.`,
+    `${roiStr} [${new Date().toISOString()}] Bot cron execution finished successfully.`,
   );
 }
 

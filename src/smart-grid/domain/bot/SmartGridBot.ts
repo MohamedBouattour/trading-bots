@@ -31,7 +31,13 @@ export class SmartGridBot {
   martingale_factor: number;
   max_exposure_pct: number;
   max_drawdown_exit_pct: number;
+  max_order_cost_pct: number;
+  tp_volatility_multiplier: number;
+  order_ttl_candles: number;
 
+  private readonly TRADE_LOG_LIMIT = 10_000;
+  private _candle_counter: number = 0;
+  private _last_volatility: number = 0;
   private _order_counter: number = 0;
   open_orders: Map<number, Order> = new Map();
   positions: Position[] = [];
@@ -61,6 +67,9 @@ export class SmartGridBot {
     this.martingale_factor = config.martingale_factor ?? 3.0;
     this.max_exposure_pct = config.max_exposure_pct ?? 60;
     this.max_drawdown_exit_pct = config.max_drawdown_exit_pct ?? 10.0;
+    this.max_order_cost_pct = config.max_order_cost_pct ?? 2;
+    this.tp_volatility_multiplier = config.tp_volatility_multiplier ?? 1.5;
+    this.order_ttl_candles = config.order_ttl_candles ?? 48;
 
     this.equity_curve = [this.initial_balance];
     this._peak_equity = this.initial_balance;
@@ -78,7 +87,9 @@ export class SmartGridBot {
     low: number,
     close: number,
     closes_history: number[],
+    volumes_history: number[] = [],
   ): void {
+    this._candle_counter++;
     if (this._start_timestamp === null) this._start_timestamp = timestamp;
     this._end_timestamp = timestamp;
 
@@ -91,9 +102,26 @@ export class SmartGridBot {
       closes_history,
       this.volatility_lookback,
     );
+    this._last_volatility = volatility;
     const sma200 = IndicatorService.computeSMA(closes_history, 200);
     const sma50 = IndicatorService.computeSMA(closes_history, 50);
     const rsi = IndicatorService.computeRSI(closes_history, 14);
+
+    const atr = IndicatorService.computeATR(closes_history, 14);
+    const avg_vol_5 =
+      volumes_history.length >= 5
+        ? volumes_history.slice(-5).reduce((a, b) => a + b, 0) / 5
+        : 0;
+    const current_vol =
+      volumes_history.length > 0
+        ? volumes_history[volumes_history.length - 1]
+        : 0;
+    const volume_declining = avg_vol_5 > 0 && current_vol < avg_vol_5 * 0.8;
+    const recent_high_14 =
+      closes_history.length >= 14
+        ? Math.max(...closes_history.slice(-14))
+        : close;
+    const atr_dip_ok = atr > 0 ? recent_high_14 - close >= atr * 0.5 : true;
 
     this.trend = trend;
 
@@ -142,6 +170,7 @@ export class SmartGridBot {
       this._emergency_exit = false;
     }
 
+    // ORDER MATTERS: _rebuild_grid → _simulate_fills → _manage_positions → _cancel_stale_orders
     this._rebuild_grid(close, volatility, is_strong_downtrend, exposure_pct);
     this._simulate_fills(timestamp, low, high);
     this._manage_positions(timestamp, low, high, close, exposure_pct);
@@ -153,7 +182,8 @@ export class SmartGridBot {
     // Respect max exposure limit
     const can_add_exposure = exposure_pct < this.max_exposure_pct;
     const rsi_allows =
-      rsi < 35 || (trend === "uptrend" && is_golden_cross && rsi < 55);
+      (rsi < 35 && (volume_declining || atr_dip_ok)) ||
+      (trend === "uptrend" && is_golden_cross && rsi < 55);
     const not_in_crash = !is_strong_downtrend || rsi < 25; // only buy deep oversold in crash
     const can_buy =
       can_add_exposure && rsi_allows && not_in_crash && !this._emergency_exit;
@@ -161,8 +191,11 @@ export class SmartGridBot {
     if (can_buy) {
       this._place_buy_orders(close, is_strong_downtrend);
     }
+    this._place_sell_orders(close, is_strong_downtrend);
 
+    this._dedup_positions();
     this.equity_curve.push(current_total_equity);
+    if (this.equity_curve.length > 5_000) this.equity_curve.shift();
   }
 
   private _rebuild_grid(
@@ -171,6 +204,8 @@ export class SmartGridBot {
     is_strong_downtrend: boolean,
     exposure_pct: number,
   ): void {
+    if (!isFinite(volatility) || volatility <= 0) return;
+
     const margin = (this.grid_upper - this.grid_lower) * 0.2;
     if (
       this.grid_levels.length > 0 &&
@@ -223,7 +258,9 @@ export class SmartGridBot {
 
   private _cancel_all_orders(): void {
     for (const [oid, o] of this.open_orders.entries()) {
-      this.balance += o.price * o.quantity;
+      if (o.side === "buy") {
+        this.balance += o.price * o.quantity;
+      }
       this.open_orders.delete(oid);
     }
   }
@@ -252,14 +289,20 @@ export class SmartGridBot {
 
       const rounded_level = this._round_price(level);
       if (!existing_prices.has(rounded_level)) {
-        // Martingale logic: increase size for deeper levels in the current grid
-        const depth_factor = Math.pow(this.martingale_factor, idx);
+        // Linear Martingale: 1×, 1.25×, 1.5×, ... — predictable and bounded
+        const depth_factor = 1 + idx * (this.martingale_factor - 1) * 0.25;
 
         let multiplier = depth_factor;
         if (this.trend === "uptrend") multiplier *= 1.2;
         if (is_strong_downtrend) multiplier *= 0.5;
 
-        const qty = this.qty_per_order * multiplier;
+        const raw_qty = this.qty_per_order * multiplier;
+        const total_equity =
+          this.balance +
+          this.positions.reduce((s, p) => s + p.quantity * level, 0);
+        const max_cost_per_order =
+          total_equity * (this.max_order_cost_pct / 100);
+        const qty = Math.min(raw_qty, max_cost_per_order / level);
         const cost = level * qty;
 
         // Skip placing orders below minNotional to avoid API rejection
@@ -276,6 +319,7 @@ export class SmartGridBot {
             price: level,
             quantity: qty,
             status: "open",
+            opened_at: this._candle_counter,
           });
           this.balance -= cost;
           placed++;
@@ -284,21 +328,65 @@ export class SmartGridBot {
     }
   }
 
+  private _place_sell_orders(
+    current_price: number,
+    is_strong_downtrend: boolean,
+  ): void {
+    // Only sell what we actually hold
+    let available_qty = this.positions.reduce((s, p) => s + p.quantity, 0);
+
+    const existing_sell_prices = new Set<number>();
+    for (const order of this.open_orders.values()) {
+      if (order.side === "sell") {
+        existing_sell_prices.add(this._round_price(order.price));
+        available_qty -= order.quantity;
+      }
+    }
+
+    if (available_qty <= 0) return;
+
+    const max_levels = is_strong_downtrend ? 3 : 15;
+    const sell_levels = this.grid_levels
+      .filter((lvl) => lvl > current_price)
+      .slice(0, max_levels);
+
+    for (const level of sell_levels) {
+      if (available_qty <= 0) break;
+      const rounded = this._round_price(level);
+      if (existing_sell_prices.has(rounded)) continue;
+      const sell_qty = Math.min(this.qty_per_order, available_qty);
+      if (sell_qty * level < 5.2) continue;
+      const oid = this._next_id();
+      this.open_orders.set(oid, {
+        order_id: oid,
+        side: "sell",
+        price: level,
+        quantity: sell_qty,
+        status: "open",
+        opened_at: this._candle_counter,
+      });
+      available_qty -= sell_qty;
+    }
+  }
+
   private _round_price(p: number): number {
     return Math.round(p * 100) / 100;
   }
 
   private _cancel_stale_orders(current_price: number): void {
+    const TTL = this.order_ttl_candles; // config default 48
     const stale: number[] = [];
     for (const [oid, o] of this.open_orders.entries()) {
-      if (o.side === "buy" && o.price > current_price) {
-        stale.push(oid);
-      }
+      const price_stale = o.side === "buy" && o.price > current_price;
+      const age_stale =
+        o.opened_at !== undefined && this._candle_counter - o.opened_at > TTL;
+      if (price_stale || age_stale) stale.push(oid);
     }
     for (const oid of stale) {
       const o = this.open_orders.get(oid)!;
       this.open_orders.delete(oid);
-      this.balance += o.price * o.quantity;
+      if (o.side === "buy") this.balance += o.price * o.quantity;
+      // sell orders: no balance refund needed (inventory remains)
     }
   }
 
@@ -311,8 +399,12 @@ export class SmartGridBot {
         order.fill_price = order.price;
         filled_ids.push(oid);
 
-        // Take profit price — just use the configured percentage
-        const tp_price = order.price * (1 + this.take_profit_pct / 100);
+        // Take profit price — dynamic volatility-based
+        const dynamic_tp_pct = Math.max(
+          this.take_profit_pct,
+          this._last_volatility * 100 * this.tp_volatility_multiplier,
+        );
+        const tp_price = order.price * (1 + dynamic_tp_pct / 100);
 
         // Stop loss price
         const sl_price =
@@ -335,6 +427,20 @@ export class SmartGridBot {
           price: order.price,
           quantity: order.quantity,
         });
+        if (this.trade_log.length > this.TRADE_LOG_LIMIT)
+          this.trade_log.shift();
+      } else if (
+        order.side === "sell" &&
+        order.price >= low &&
+        order.price <= high
+      ) {
+        order.status = "filled";
+        order.fill_price = order.price;
+        filled_ids.push(oid);
+        const proceeds = order.price * order.quantity;
+        this.balance += proceeds;
+        // FIFO consume from positions
+        this._consume_positions_fifo(order.quantity, order.price, timestamp);
       }
     }
 
@@ -417,11 +523,95 @@ export class SmartGridBot {
           reason: reason,
           pnl: proceeds - pos.entry_price * pos.quantity,
         });
+        if (this.trade_log.length > this.TRADE_LOG_LIMIT)
+          this.trade_log.shift();
       } else {
         remaining.push(pos);
       }
     }
     this.positions = remaining;
+  }
+
+  private _consume_positions_fifo(
+    qty_to_sell: number,
+    sell_price: number,
+    timestamp: number,
+  ): void {
+    let remaining = qty_to_sell;
+    const kept: Position[] = [];
+    for (const pos of this.positions) {
+      if (remaining <= 0) {
+        kept.push(pos);
+        continue;
+      }
+      if (pos.quantity <= remaining) {
+        remaining -= pos.quantity;
+        this.trade_log.push({
+          timestamp,
+          side: "sell",
+          price: sell_price,
+          quantity: pos.quantity,
+          reason: "grid_sell",
+          pnl: (sell_price - pos.entry_price) * pos.quantity,
+        });
+        if (this.trade_log.length > this.TRADE_LOG_LIMIT)
+          this.trade_log.shift();
+      } else {
+        pos.quantity -= remaining;
+        this.trade_log.push({
+          timestamp,
+          side: "sell",
+          price: sell_price,
+          quantity: remaining,
+          reason: "grid_sell",
+          pnl: (sell_price - pos.entry_price) * remaining,
+        });
+        if (this.trade_log.length > this.TRADE_LOG_LIMIT)
+          this.trade_log.shift();
+        remaining = 0;
+        kept.push(pos);
+      }
+    }
+    this.positions = kept;
+  }
+
+  private _dedup_positions(): void {
+    if (this.positions.length < 2) return;
+    const sorted = [...this.positions].sort(
+      (a, b) => a.entry_price - b.entry_price,
+    );
+    const merged: Position[] = [];
+    let cur = sorted[0];
+    for (let i = 1; i < sorted.length; i++) {
+      const next = sorted[i];
+      const diff =
+        Math.abs(next.entry_price - cur.entry_price) / cur.entry_price;
+      if (diff <= 0.005) {
+        const total_qty = cur.quantity + next.quantity;
+        const avg_entry =
+          (cur.entry_price * cur.quantity + next.entry_price * next.quantity) /
+          total_qty;
+        const avg_tp =
+          (cur.take_profit_price * cur.quantity +
+            next.take_profit_price * next.quantity) /
+          total_qty;
+        const min_sl =
+          cur.stop_loss_price > 0 && next.stop_loss_price > 0
+            ? Math.min(cur.stop_loss_price, next.stop_loss_price)
+            : 0;
+        const new_pos = new Position(avg_entry, total_qty, avg_tp, min_sl, 0);
+        new_pos.highest_price_seen = Math.max(
+          cur.highest_price_seen,
+          next.highest_price_seen,
+        );
+        cur = new_pos;
+      } else {
+        merged.push(cur);
+        cur = next;
+      }
+    }
+    merged.push(cur);
+    this.positions = merged;
   }
 
   public summary(): BotSummary {
@@ -482,6 +672,7 @@ export class SmartGridBot {
         reason: reason,
         pnl: proceeds - pos.entry_price * pos.quantity,
       });
+      if (this.trade_log.length > this.TRADE_LOG_LIMIT) this.trade_log.shift();
     }
     this.positions = [];
   }

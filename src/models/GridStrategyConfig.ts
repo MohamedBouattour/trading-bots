@@ -12,4 +12,7 @@ export interface GridStrategyConfig {
   martingale_factor?: number;
   max_exposure_pct?: number;
   max_drawdown_exit_pct?: number;
+  max_order_cost_pct?: number;
+  tp_volatility_multiplier?: number;
+  order_ttl_candles?: number;
 }

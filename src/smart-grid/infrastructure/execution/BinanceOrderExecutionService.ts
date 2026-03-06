@@ -23,18 +23,36 @@ interface BinanceExchangeInfo {
 
 export class BinanceOrderExecutionService implements IOrderExecutor {
   private client: BinanceRest;
+  private timeOffset: number = 0;
+  private isTimeSynced: boolean = false;
 
   constructor(apiKey: string, apiSecret: string) {
     this.client = Binance({
       apiKey,
       apiSecret,
-      getTime: () => Date.now(),
+      getTime: () => Date.now() + this.timeOffset,
     });
   }
 
   private exchangeInfo: BinanceExchangeInfo | null = null;
 
+  private async ensureTimeSync() {
+    if (!this.isTimeSynced) {
+      try {
+        const serverTime = await this.client.time();
+        this.timeOffset = Number(serverTime) - Date.now();
+        this.isTimeSynced = true;
+        console.log(
+          `[Binance] Time synchronized. Local offset: ${this.timeOffset}ms`,
+        );
+      } catch (_error) {
+        console.warn("[Binance] Time sync failed, using local time.");
+      }
+    }
+  }
+
   private async getSymbolFilters(symbol: string) {
+    await this.ensureTimeSync();
     if (!this.exchangeInfo) {
       this.exchangeInfo = await this.client.exchangeInfo();
     }
@@ -58,11 +76,23 @@ export class BinanceOrderExecutionService implements IOrderExecutor {
   }
 
   private roundByStep(value: number, step: string): string {
-    const precision = step.indexOf("1") - step.indexOf(".");
-    const p = precision < 0 ? 0 : precision;
-    // Use floor to be safe with lot sizes
-    const factor = Math.pow(10, p);
-    return (Math.floor(value * factor) / factor).toFixed(p);
+    const stepNum = parseFloat(step);
+    if (isNaN(stepNum) || stepNum === 0) return value.toString();
+
+    let precision = 0;
+    if (step.includes(".")) {
+      precision = step.split(".")[1].replace(/0+$/, "").length;
+    }
+
+    const multiplier = Math.pow(10, precision);
+    const valInt = Math.round(value * multiplier);
+    const stepInt = Math.round(stepNum * multiplier);
+
+    // Lot sizes must be floored to prevent insufficient balance rejection
+    const roundedInt = Math.floor(valInt / stepInt) * stepInt;
+    const roundedVal = roundedInt / multiplier;
+
+    return roundedVal.toFixed(precision);
   }
 
   async openMarketOrder(
@@ -71,6 +101,7 @@ export class BinanceOrderExecutionService implements IOrderExecutor {
     quoteQty: number,
     testOnly: boolean = false,
   ): Promise<void> {
+    await this.ensureTimeSync();
     try {
       console.log(
         `Opening ${side} order for ${symbol}. Quote Amount: ${quoteQty}`,
@@ -101,6 +132,7 @@ export class BinanceOrderExecutionService implements IOrderExecutor {
   async getAccountBalances(): Promise<
     { asset: string; free: string; locked: string }[]
   > {
+    await this.ensureTimeSync();
     try {
       const info = await this.client.accountInfo();
       return info.balances;
@@ -117,6 +149,7 @@ export class BinanceOrderExecutionService implements IOrderExecutor {
     quantity: number,
     testOnly: boolean = false,
   ): Promise<unknown> {
+    await this.ensureTimeSync();
     try {
       const { tickSize, stepSize } = await this.getSymbolFilters(symbol);
       const roundedPrice = this.roundByStep(price, tickSize);
@@ -149,6 +182,7 @@ export class BinanceOrderExecutionService implements IOrderExecutor {
   }
 
   async cancelOrder(symbol: string, orderId: number): Promise<void> {
+    await this.ensureTimeSync();
     try {
       console.log(`Cancelling order ${orderId} for ${symbol}`);
       await this.client.cancelOrder({
@@ -161,6 +195,7 @@ export class BinanceOrderExecutionService implements IOrderExecutor {
   }
 
   async getOpenOrders(symbol: string): Promise<unknown[]> {
+    await this.ensureTimeSync();
     try {
       return await this.client.openOrders({ symbol });
     } catch (error: unknown) {
