@@ -40,17 +40,21 @@ export class RunBacktestUseCase {
 
     const bot = new SmartGridBot(config);
     const closes: number[] = [];
+    const volumes: number[] = [];
 
     console.log(`\n  Running backtest on ${df.length} candles...`);
     for (const row of df) {
       closes.push(row.close);
+      volumes.push(row.volume);
+      const window = closes.slice(-210);
       bot.on_candle(
         row.timestamp,
         row.open,
         row.high,
         row.low,
         row.close,
-        closes,
+        window,
+        volumes.slice(-50),
       );
     }
 

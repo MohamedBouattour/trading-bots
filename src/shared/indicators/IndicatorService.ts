@@ -1,6 +1,12 @@
 import { MathUtils } from "../utils/MathUtils";
 
 export class IndicatorService {
+  static computeATR(closes: number[], period: number = 14): number {
+    const changes = closes.slice(1).map((c, i) => Math.abs(c - closes[i]));
+    if (changes.length < period) return 0;
+    return changes.slice(-period).reduce((a, b) => a + b, 0) / period;
+  }
+
   static computeVolatility(closes: number[], lookback_period: number): number {
     if (closes.length < 2) return 0.01;
     const lookback = closes.slice(-lookback_period);

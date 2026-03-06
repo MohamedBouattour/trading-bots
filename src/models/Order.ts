@@ -5,4 +5,5 @@ export interface Order {
   quantity: number;
   status: "open" | "filled" | "cancelled";
   fill_price?: number;
+  opened_at?: number;
 }
