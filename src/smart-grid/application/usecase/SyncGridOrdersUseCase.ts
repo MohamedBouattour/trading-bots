@@ -51,12 +51,14 @@ export class SyncGridOrdersUseCase {
     const currentPrice = latestCandle.close;
 
     const ZERO_BALANCE: AssetBalance = { asset: "", free: 0, locked: 0 };
-    const baseBalance =
-      balances.find((b) => b.asset === baseAsset) ??
-      { ...ZERO_BALANCE, asset: baseAsset };
-    const quoteBalance =
-      balances.find((b) => b.asset === quoteAsset) ??
-      { ...ZERO_BALANCE, asset: quoteAsset };
+    const baseBalance = balances.find((b) => b.asset === baseAsset) ?? {
+      ...ZERO_BALANCE,
+      asset: baseAsset,
+    };
+    const quoteBalance = balances.find((b) => b.asset === quoteAsset) ?? {
+      ...ZERO_BALANCE,
+      asset: quoteAsset,
+    };
 
     const state: MarketState = {
       symbol: config.symbol,
@@ -79,7 +81,7 @@ export class SyncGridOrdersUseCase {
     this.logger.info(
       `${roiTag} price=${currentPrice} | ` +
         `${quoteBalance.free.toFixed(2)} ${quoteAsset} free, ` +
-        `${baseBalance.free.toFixed(6)} ${baseAsset} free`,
+        `${baseBalance.free.toFixed(2)} ${baseAsset} free`,
     );
 
     const buyOrders = openOrders.filter((o) => o.side === "BUY");
@@ -104,14 +106,18 @@ export class SyncGridOrdersUseCase {
 
     const qtyLockedInSells = sellOrders.reduce((s, o) => s + o.origQty, 0);
     const totalBase = baseBalance.free + baseBalance.locked;
-    const unhedgedQty = totalBase - qtyLockedInSells;
+    const unhedgedQty = Number(
+      ((totalBase - qtyLockedInSells) * 0.99).toFixed(2),
+    );
 
     if (unhedgedQty <= 0.000001) {
       this.logger.info(`[SELL] All ${baseAsset} is hedged. Nothing to do.`);
       return;
     }
 
-    const targetSellPrice = currentPrice * (1 + takeProfitPct / 100);
+    const targetSellPrice = Number(
+      (currentPrice * (1 + takeProfitPct / 100)).toFixed(2),
+    );
 
     const alreadyExists = sellOrders.some(
       (o) =>
@@ -119,7 +125,7 @@ export class SyncGridOrdersUseCase {
     );
     if (alreadyExists) {
       this.logger.info(
-        `[SELL] Sell order already exists near ${targetSellPrice.toFixed(4)} ${quoteAsset}.`,
+        `[SELL] Sell order already exists near ${targetSellPrice.toFixed(2)} ${quoteAsset}.`,
       );
       return;
     }
@@ -127,14 +133,14 @@ export class SyncGridOrdersUseCase {
     if (unhedgedQty * targetSellPrice < MIN_ORDER_NOTIONAL) {
       this.logger.warn(
         `[SELL] Skipped: notional too small ` +
-          `(${unhedgedQty.toFixed(6)} ${baseAsset} × ${targetSellPrice.toFixed(2)} < ${MIN_ORDER_NOTIONAL} ${quoteAsset}).`,
+          `(${unhedgedQty.toFixed(2)} ${baseAsset} × ${targetSellPrice.toFixed(2)} < ${MIN_ORDER_NOTIONAL} ${quoteAsset}).`,
       );
       return;
     }
 
     this.logger.info(
-      `[SELL] Placing LIMIT SELL ${unhedgedQty.toFixed(6)} ${baseAsset}` +
-        ` @ ${targetSellPrice.toFixed(4)} ${quoteAsset} (TP: +${takeProfitPct}%)`,
+      `[SELL] Placing LIMIT SELL ${unhedgedQty.toFixed(2)} ${baseAsset}` +
+        ` @ ${targetSellPrice.toFixed(2)} ${quoteAsset} (TP: +${takeProfitPct}%)`,
     );
     await this.executor.placeLimitOrder(
       symbol,
@@ -171,7 +177,7 @@ export class SyncGridOrdersUseCase {
       );
       if (!stillValid) {
         this.logger.info(
-          `[BUY] Cancelling stale order #${ob.orderId} @ ${ob.price.toFixed(4)}`,
+          `[BUY] Cancelling stale order #${ob.orderId} @ ${ob.price.toFixed(2)}`,
         );
         await this.executor.cancelOrder(symbol, ob.orderId);
       }
@@ -200,7 +206,7 @@ export class SyncGridOrdersUseCase {
         placed++;
       } catch (err) {
         this.logger.error(
-          `[BUY] Failed to place order @ ${lvl.price.toFixed(4)} — stopping grid placement.`,
+          `[BUY] Failed to place order @ ${lvl.price.toFixed(2)} — stopping grid placement.`,
           err,
         );
         break; // likely insufficient balance; stop placing further orders

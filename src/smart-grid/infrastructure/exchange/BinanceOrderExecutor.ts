@@ -1,5 +1,13 @@
-import Binance, { BinanceRest, OrderSide, OrderType, TimeInForce } from "binance-api-node";
-import { IOrderExecutorPort, ExchangeOrder } from "../../domain/port/IOrderExecutorPort";
+import Binance, {
+  BinanceRest,
+  OrderSide,
+  OrderType,
+  TimeInForce,
+} from "binance-api-node";
+import {
+  IOrderExecutorPort,
+  ExchangeOrder,
+} from "../../domain/port/IOrderExecutorPort";
 import { AssetBalance } from "../../domain/model/Balance";
 
 interface BinanceFilter {
@@ -53,13 +61,21 @@ export class BinanceOrderExecutor implements IOrderExecutorPort {
   ): Promise<{ tickSize: string; stepSize: string }> {
     await this.ensureTimeSync();
     if (!this.exchangeInfo) {
-      this.exchangeInfo = await this.client.exchangeInfo();
+      this.exchangeInfo = (await this.client.exchangeInfo()) as {
+        symbols: BinanceSymbolInfo[];
+      };
     }
-    const info = this.exchangeInfo.symbols.find((s) => s.symbol === symbol);
+
+    const exchangeInfo = this.exchangeInfo;
+    const info = exchangeInfo.symbols.find((s) => s.symbol === symbol);
     if (!info) throw new Error(`Symbol ${symbol} not found in exchange info.`);
 
-    const priceFilter = info.filters.find((f) => f.filterType === "PRICE_FILTER");
-    const lotSize = info.filters.find((f) => f.filterType === "LOT_SIZE");
+    const priceFilter = info.filters.find(
+      (f: { filterType: string }) => f.filterType === "PRICE_FILTER",
+    );
+    const lotSize = info.filters.find(
+      (f: { filterType: string }) => f.filterType === "LOT_SIZE",
+    );
 
     return {
       tickSize: priceFilter?.tickSize ?? "0.01",
@@ -78,8 +94,9 @@ export class BinanceOrderExecutor implements IOrderExecutorPort {
 
     const multiplier = Math.pow(10, precision);
     const roundedInt =
-      Math.floor(Math.round(value * multiplier) / Math.round(stepNum * multiplier)) *
-      Math.round(stepNum * multiplier);
+      Math.floor(
+        Math.round(value * multiplier) / Math.round(stepNum * multiplier),
+      ) * Math.round(stepNum * multiplier);
 
     return (roundedInt / multiplier).toFixed(precision);
   }
