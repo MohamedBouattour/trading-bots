@@ -16,7 +16,7 @@ export interface SyncGridOrdersInput {
   readonly initialCapital: number;
 }
 
-const PRICE_TOLERANCE = 0.001; // 0.1% — avoids spammy re-placement on small drifts
+const PRICE_TOLERANCE = 0.002; // 0.2% — avoids spammy re-placement on small drifts
 const MIN_ORDER_NOTIONAL = 5.5; // Binance minimum order value in USDT
 
 export class SyncGridOrdersUseCase {
@@ -91,7 +91,7 @@ export class SyncGridOrdersUseCase {
     await this.syncSellOrders(state, sellOrders, config.takeProfitPct);
 
     // ── 5. Phase 2: Rebuild buy grid below current price ──────────────────
-    await this.syncBuyOrders(state, buyOrders, config);
+    await this.syncBuyOrders(state, buyOrders, sellOrders, config);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -156,11 +156,24 @@ export class SyncGridOrdersUseCase {
   private async syncBuyOrders(
     state: MarketState,
     buyOrders: ExchangeOrder[],
+    sellOrders: ExchangeOrder[],
     config: GridConfig,
   ): Promise<void> {
-    const { symbol, quoteAsset, currentPrice, quoteBalance } = state;
+    const { symbol, currentPrice, quoteAsset, quoteBalance } = state;
 
     const perOrderBudget = Math.trunc(quoteBalance.free / config.gridCount);
+
+    const closestPriceEntry = Math.max(...buyOrders.map((o) => o.price));
+    if (
+      buyOrders.length == 15 &&
+      (closestPriceEntry - currentPrice) / closestPriceEntry
+    ) {
+      this.logger.info(
+        `[SKIP] Price in Range.${(((closestPriceEntry - currentPrice) / closestPriceEntry) * 100).toFixed(2)}%. Current Price ${currentPrice}. waiting for ${buyOrders.length} orders to be filled`,
+      );
+      return;
+    }
+
     if (perOrderBudget < MIN_ORDER_NOTIONAL) {
       this.logger.warn(
         `[BUY] Insufficient ${quoteAsset}: budget per order = ${perOrderBudget.toFixed(2)} < min ${MIN_ORDER_NOTIONAL}.`,
@@ -192,6 +205,21 @@ export class SyncGridOrdersUseCase {
         (ob) => Math.abs(ob.price - lvl.price) / lvl.price < PRICE_TOLERANCE,
       );
       if (exists) {
+        kept++;
+        continue;
+      }
+
+      // Avoid duplicating positions: if we already have a sell order for this level's target TP, skip buy
+      const targetSellPrice = lvl.price * (1 + config.takeProfitPct / 100);
+      const hasActivePosition = sellOrders.some(
+        (so) =>
+          Math.abs(so.price - targetSellPrice) / targetSellPrice <
+          PRICE_TOLERANCE,
+      );
+      if (hasActivePosition) {
+        this.logger.info(
+          `[BUY] Level ${lvl.price.toFixed(2)} skipped: position already active (TP @ ${targetSellPrice.toFixed(2)})`,
+        );
         kept++;
         continue;
       }
