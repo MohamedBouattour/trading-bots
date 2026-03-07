@@ -1,0 +1,458 @@
+{
+  "call": "auditInfra",
+  "model": "gemini-2.5-flash",
+  "timestamp": "2026-03-07T03:27:21.156Z",
+  "durationMs": 77575,
+  "retryCount": 1,
+  "estimatedInputTokens": 1331,
+  "payload": {
+    "model": "gemini-2.5-flash",
+    "project": "vg1p-apps-gemini-code-b1",
+    "request": {
+      "systemInstruction": {
+        "role": "system",
+        "parts": [
+          {
+            "text": "You are an expert software architect performing an infrastructure-oriented repository audit on a JavaScript/TypeScript project.\n\nYour ONLY job in this call is FILE DISCOVERY, WEIGHTING, and RANKING — do NOT suggest fixes.\n\n## Inputs you receive\n- `package.json`: dependency manifest and scripts.\n- Infra files: CI/CD configs, Dockerfiles, build/bundler configs, IaC, environment files.\n- Project file tree: every file with its path, extension, byte size, and line count.\n\n## Weighting rules (0–100 scale)\n\n### High weight (60–100) — files that directly affect build, deploy, runtime, or security:\n- CI/CD configs: .gitlab-ci.yml, .github/workflows/*, Jenkinsfile, Makefile targets.\n- Build/bundler: webpack.config.*, vite.config.*, rollup.config.*, tsconfig*.json, esbuild configs.\n- Container & IaC: Dockerfile*, docker-compose.*, k8s manifests, Terraform (.tf), Pulumi, CDK.\n- Framework bootstrap: main entrypoints, root app module, DI container wiring, routing root.\n- Security-critical: auth middleware, permission guards, CORS config, env/secret management.\n- Shared infrastructure modules used across many features.\n\n### Medium weight (20–59) — files with meaningful but scoped impact:\n- Feature modules with real business logic, non-trivial services, complex components.\n- Database migration files, ORM entities with business rules.\n- API gateway or route definitions that expose endpoints.\n\n### Low / zero weight (0–19) — files safe to skip in deep review:\n- Pure type/interface/enum/model files with NO branching, loops, side-effects, or IO.\n- Auto-generated files: *.generated.*, *.g.ts, *.gen.ts, *pb.ts (protobuf), graphql schema snapshots.\n- Test files: *.spec.ts, *.test.ts, *.e2e.ts (flag their EXISTENCE, but skip deep review).\n- Storybook, mocks, fixtures: *.stories.ts, *.mock.ts, /mocks/*, /fixtures/*.\n- Translation/i18n JSON files.\n- Files under dist/, build/, .cache/, node_modules/ (should not appear, but ignore if present).\n\n## Boilerplate detection heuristic\nMark `ignore_in_deep_review: true` when ALL of the following are true:\n1. File name matches: *.model.ts | *.models.ts | *.types.ts | *.type.ts | *.enum.ts | *.enums.ts | *.interface.ts | *.interfaces.ts | *.dto.ts | *.const.ts | *.constants.ts\n2. Line count ≤ 50\n3. Content (inferred from name + size) contains ONLY: type aliases, interfaces, enums, plain constants — no class methods, no function bodies, no async operations.\n\nExample: a file named `user-modal.ts` or `status.enum.ts` with 30 lines → weight = 0, ignore_in_deep_review = true.\nCounter-example: `app.module.ts` or `auth.guard.ts` → never ignore regardless of line count.\n\n## Output format\nReturn ONLY a valid JSON object matching this exact shape — no markdown, no explanation outside JSON:\n\n```json\n{\n  \"files\": [\n    {\n      \"path\": \"src/app/app.module.ts\",\n      \"extension\": \".ts\",\n      \"lines\": 123,\n      \"bytes\": 3456,\n      \"weight\": 87,\n      \"reason\": \"Root Angular module configuring app-wide providers and routing.\",\n      \"ignore_in_deep_review\": false\n    }\n  ],\n  \"summary\": {\n    \"total_files\": 0,\n    \"total_lines\": 0,\n    \"high_impact_files\": [\"path/to/high.ts\"],\n    \"ignored_patterns_detected\": [\"*.model.ts\", \"*.enum.ts\", \"*.spec.ts\"]\n  }\n}\n```\n\nSort the `files` array by `weight` descending.\nBe deterministic: structurally similar files must receive similar weights."
+          }
+        ]
+      },
+      "contents": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "text": "## package.json\n```json\n{\n  \"name\": \"smart-grid\",\n  \"version\": \"1.0.0\",\n  \"description\": \"This report details the design, implementation, and backtesting of an enhanced, \\\"smart\\\" grid trading bot for the BTC/USDT cryptocurrency pair. The objective was to develop a more adaptive and profitable strategy, aiming for a 20-30% return over a 6-month period, by incorporating dynamic grid adjustments and trend-following mechanisms.\",\n  \"main\": \"index.js\",\n  \"scripts\": {\n    \"build\": \"esbuild src/smart-grid/presentation/cli/run_bot.ts --bundle --platform=node --outfile=dist/smart-grid.js\",\n    \"backtest\": \"ts-node src/smart-grid/presentation/cli/backtest_cli.ts\",\n    \"optimize\": \"ts-node src/smart-grid/presentation/cli/optimize_cli.ts\",\n    \"optimize-roi\": \"ts-node src/smart-grid/presentation/cli/optimize_max_roi_cli.ts\",\n    \"open-order\": \"ts-node src/smart-grid/presentation/cli/open_order_cli.ts\",\n    \"test\": \"vitest run\"\n  },\n  \"keywords\": [],\n  \"author\": \"\",\n  \"license\": \"ISC\",\n  \"type\": \"commonjs\",\n  \"dependencies\": {\n    \"@types/node\": \"^25.3.3\",\n    \"@types/papaparse\": \"^5.5.2\",\n    \"axios\": \"^1.13.6\",\n    \"binance-api-node\": \"^0.13.8\",\n    \"dotenv\": \"^17.3.1\",\n    \"papaparse\": \"^5.5.3\",\n    \"ts-node\": \"^10.9.2\",\n    \"typescript\": \"^5.9.3\"\n  },\n  \"devDependencies\": {\n    \"@eslint/js\": \"^10.0.1\",\n    \"esbuild\": \"^0.27.3\",\n    \"eslint\": \"^10.0.2\",\n    \"globals\": \"^17.4.0\",\n    \"jiti\": \"^2.6.1\",\n    \"typescript-eslint\": \"^8.56.1\",\n    \"vitest\": \"^4.0.18\"\n  }\n}\n\n```\n\n## Full Project File Tree (35 files)\n```json\n[\n{ \"path\": \"src\\models\\Candle.ts\", \"extension\": \"ts\", \"bytes\": 139, \"lines\": 9 }\n{ \"path\": \"src\\models\\GridStrategyConfig.ts\", \"extension\": \"ts\", \"bytes\": 516, \"lines\": 19 }\n{ \"path\": \"src\\models\\Order.ts\", \"extension\": \"ts\", \"bytes\": 205, \"lines\": 10 }\n{ \"path\": \"src\\models\\Position.ts\", \"extension\": \"ts\", \"bytes\": 948, \"lines\": 36 }\n{ \"path\": \"src\\models\\Trade.ts\", \"extension\": \"ts\", \"bytes\": 159, \"lines\": 9 }\n{ \"path\": \"src\\shared\\indicators\\IndicatorService.ts\", \"extension\": \"ts\", \"bytes\": 2280, \"lines\": 68 }\n{ \"path\": \"src\\shared\\utils\\MathUtils.ts\", \"extension\": \"ts\", \"bytes\": 525, \"lines\": 17 }\n{ \"path\": \"src\\smart-grid\\ports\\IMarketDataProvider.ts\", \"extension\": \"ts\", \"bytes\": 226, \"lines\": 11 }\n{ \"path\": \"src\\smart-grid\\ports\\IOrderExecutor.ts\", \"extension\": \"ts\", \"bytes\": 459, \"lines\": 21 }\n{ \"path\": \"src\\smart-grid\\ports\\IReportGenerator.ts\", \"extension\": \"ts\", \"bytes\": 227, \"lines\": 7 }\n{ \"path\": \"src\\smart-grid\\application\\usecase\\SyncGridOrdersUseCase.ts\", \"extension\": \"ts\", \"bytes\": 9631, \"lines\": 250 }\n{ \"path\": \"src\\smart-grid\\application\\usecases\\RunBacktestUseCase.ts\", \"extension\": \"ts\", \"bytes\": 2250, \"lines\": 76 }\n{ \"path\": \"src\\smart-grid\\domain\\bot\\SmartGridBot.ts\", \"extension\": \"ts\", \"bytes\": 23230, \"lines\": 680 }\n{ \"path\": \"src\\smart-grid\\domain\\model\\Balance.ts\", \"extension\": \"ts\", \"bytes\": 208, \"lines\": 10 }\n{ \"path\": \"src\\smart-grid\\domain\\model\\Candle.ts\", \"extension\": \"ts\", \"bytes\": 194, \"lines\": 9 }\n{ \"path\": \"src\\smart-grid\\domain\\model\\GridConfig.ts\", \"extension\": \"ts\", \"bytes\": 373, \"lines\": 11 }\n{ \"path\": \"src\\smart-grid\\domain\\model\\GridLevel.ts\", \"extension\": \"ts\", \"bytes\": 127, \"lines\": 6 }\n{ \"path\": \"src\\smart-grid\\domain\\model\\MarketState.ts\", \"extension\": \"ts\", \"bytes\": 284, \"lines\": 11 }\n{ \"path\": \"src\\smart-grid\\domain\\port\\ILoggerPort.ts\", \"extension\": \"ts\", \"bytes\": 240, \"lines\": 7 }\n{ \"path\": \"src\\smart-grid\\domain\\port\\IMarketDataPort.ts\", \"extension\": \"ts\", \"bytes\": 408, \"lines\": 15 }\n{ \"path\": \"src\\smart-grid\\domain\\port\\IOrderExecutorPort.ts\", \"extension\": \"ts\", \"bytes\": 757, \"lines\": 25 }\n{ \"path\": \"src\\smart-grid\\domain\\service\\CapitalCalculator.ts\", \"extension\": \"ts\", \"bytes\": 1135, \"lines\": 31 }\n{ \"path\": \"src\\smart-grid\\domain\\service\\GridCalculator.ts\", \"extension\": \"ts\", \"bytes\": 1141, \"lines\": 31 }\n{ \"path\": \"src\\smart-grid\\infrastructure\\config\\EnvConfigLoader.ts\", \"extension\": \"ts\", \"bytes\": 2138, \"lines\": 67 }\n{ \"path\": \"src\\smart-grid\\infrastructure\\exchange\\BinanceMarketDataAdapter.ts\", \"extension\": \"ts\", \"bytes\": 1189, \"lines\": 37 }\n{ \"path\": \"src\\smart-grid\\infrastructure\\exchange\\BinanceOrderExecutor.ts\", \"extension\": \"ts\", \"bytes\": 5030, \"lines\": 158 }\n{ \"path\": \"src\\smart-grid\\infrastructure\\execution\\BinanceOrderExecutionService.ts\", \"extension\": \"ts\", \"bytes\": 6060, \"lines\": 207 }\n{ \"path\": \"src\\smart-grid\\infrastructure\\logger\\ConsoleLogger.ts\", \"extension\": \"ts\", \"bytes\": 530, \"lines\": 20 }\n{ \"path\": \"src\\smart-grid\\infrastructure\\market_data\\BinanceMarketDataProvider.ts\", \"extension\": \"ts\", \"bytes\": 1581, \"lines\": 56 }\n{ \"path\": \"src\\smart-grid\\infrastructure\\market_data\\CompositeMarketDataProvider.ts\", \"extension\": \"ts\", \"bytes\": 1626, \"lines\": 57 }\n{ \"path\": \"src\\smart-grid\\infrastructure\\market_data\\LocalCsvMarketDataProvider.ts\", \"extension\": \"ts\", \"bytes\": 1658, \"lines\": 58 }\n{ \"path\": \"src\\smart-grid\\infrastructure\\market_data\\SyntheticMarketDataProvider.ts\", \"extension\": \"ts\", \"bytes\": 1630, \"lines\": 54 }\n{ \"path\": \"src\\smart-grid\\infrastructure\\reporting\\HtmlReportGenerator.ts\", \"extension\": \"ts\", \"bytes\": 3002, \"lines\": 86 }\n{ \"path\": \"src\\smart-grid\\presentation\\cli\\backtest_cli.ts\", \"extension\": \"ts\", \"bytes\": 2811, \"lines\": 63 }\n{ \"path\": \"src\\smart-grid\\presentation\\cli\\run_bot.ts\", \"extension\": \"ts\", \"bytes\": 1270, \"lines\": 34 }\n]\n```"
+            }
+          ]
+        }
+      ],
+      "generationConfig": {
+        "temperature": 0,
+        "responseMimeType": "application/json",
+        "responseSchema": {
+          "type": "OBJECT",
+          "properties": {
+            "files": {
+              "type": "ARRAY",
+              "items": {
+                "type": "OBJECT",
+                "properties": {
+                  "path": {
+                    "type": "STRING"
+                  },
+                  "extension": {
+                    "type": "STRING"
+                  },
+                  "lines": {
+                    "type": "NUMBER"
+                  },
+                  "bytes": {
+                    "type": "NUMBER"
+                  },
+                  "weight": {
+                    "type": "NUMBER"
+                  },
+                  "reason": {
+                    "type": "STRING"
+                  },
+                  "ignore_in_deep_review": {
+                    "type": "BOOLEAN"
+                  }
+                },
+                "required": [
+                  "path",
+                  "extension",
+                  "lines",
+                  "bytes",
+                  "weight",
+                  "reason",
+                  "ignore_in_deep_review"
+                ]
+              }
+            },
+            "summary": {
+              "type": "OBJECT",
+              "properties": {
+                "total_files": {
+                  "type": "NUMBER"
+                },
+                "total_lines": {
+                  "type": "NUMBER"
+                },
+                "high_impact_files": {
+                  "type": "ARRAY",
+                  "items": {
+                    "type": "STRING"
+                  }
+                },
+                "ignored_patterns_detected": {
+                  "type": "ARRAY",
+                  "items": {
+                    "type": "STRING"
+                  }
+                }
+              },
+              "required": [
+                "total_files",
+                "total_lines",
+                "high_impact_files",
+                "ignored_patterns_detected"
+              ]
+            }
+          },
+          "required": [
+            "files",
+            "summary"
+          ]
+        }
+      }
+    }
+  },
+  "response": {
+    "files": [
+      {
+        "path": "src\\smart-grid\\domain\\bot\\SmartGridBot.ts",
+        "extension": "ts",
+        "lines": 680,
+        "bytes": 23230,
+        "weight": 95,
+        "reason": "The central domain logic for the Smart Grid Bot, orchestrating all trading operations.",
+        "ignore_in_deep_review": false
+      },
+      {
+        "path": "src\\smart-grid\\presentation\\cli\\run_bot.ts",
+        "extension": "ts",
+        "lines": 34,
+        "bytes": 1270,
+        "weight": 95,
+        "reason": "The primary entry point for running the Smart Grid Bot in production, identified from package.json build script.",
+        "ignore_in_deep_review": false
+      },
+      {
+        "path": "src\\smart-grid\\presentation\\cli\\backtest_cli.ts",
+        "extension": "ts",
+        "lines": 63,
+        "bytes": 2811,
+        "weight": 90,
+        "reason": "Main CLI entry point for running backtests, orchestrates the backtesting process, identified from package.json script.",
+        "ignore_in_deep_review": false
+      },
+      {
+        "path": "src\\smart-grid\\infrastructure\\config\\EnvConfigLoader.ts",
+        "extension": "ts",
+        "lines": 67,
+        "bytes": 2138,
+        "weight": 90,
+        "reason": "Handles loading and parsing environment configurations, critical for deployment and security.",
+        "ignore_in_deep_review": false
+      },
+      {
+        "path": "src\\smart-grid\\application\\usecase\\SyncGridOrdersUseCase.ts",
+        "extension": "ts",
+        "lines": 250,
+        "bytes": 9631,
+        "weight": 85,
+        "reason": "Core application use case for synchronizing grid orders, critical bot logic.",
+        "ignore_in_deep_review": false
+      },
+      {
+        "path": "src\\smart-grid\\infrastructure\\exchange\\BinanceOrderExecutor.ts",
+        "extension": "ts",
+        "lines": 158,
+        "bytes": 5030,
+        "weight": 85,
+        "reason": "Executes orders on Binance, a critical external dependency and runtime component.",
+        "ignore_in_deep_review": false
+      },
+      {
+        "path": "src\\smart-grid\\infrastructure\\execution\\BinanceOrderExecutionService.ts",
+        "extension": "ts",
+        "lines": 207,
+        "bytes": 6060,
+        "weight": 85,
+        "reason": "Service for managing and executing orders specifically on Binance, critical runtime component.",
+        "ignore_in_deep_review": false
+      },
+      {
+        "path": "src\\smart-grid\\application\\usecases\\RunBacktestUseCase.ts",
+        "extension": "ts",
+        "lines": 76,
+        "bytes": 2250,
+        "weight": 80,
+        "reason": "Core application use case for running backtests, essential for strategy validation.",
+        "ignore_in_deep_review": false
+      },
+      {
+        "path": "src\\smart-grid\\infrastructure\\exchange\\BinanceMarketDataAdapter.ts",
+        "extension": "ts",
+        "lines": 37,
+        "bytes": 1189,
+        "weight": 80,
+        "reason": "Adapts Binance market data for the application's domain, critical external dependency.",
+        "ignore_in_deep_review": false
+      },
+      {
+        "path": "src\\smart-grid\\infrastructure\\market_data\\BinanceMarketDataProvider.ts",
+        "extension": "ts",
+        "lines": 56,
+        "bytes": 1581,
+        "weight": 80,
+        "reason": "Provides real-time market data from Binance, critical external dependency.",
+        "ignore_in_deep_review": false
+      },
+      {
+        "path": "src\\smart-grid\\domain\\service\\CapitalCalculator.ts",
+        "extension": "ts",
+        "lines": 31,
+        "bytes": 1135,
+        "weight": 75,
+        "reason": "Domain service responsible for calculating capital requirements and allocations.",
+        "ignore_in_deep_review": false
+      },
+      {
+        "path": "src\\smart-grid\\domain\\service\\GridCalculator.ts",
+        "extension": "ts",
+        "lines": 31,
+        "bytes": 1141,
+        "weight": 75,
+        "reason": "Domain service responsible for calculating grid levels and parameters.",
+        "ignore_in_deep_review": false
+      },
+      {
+        "path": "src\\smart-grid\\infrastructure\\market_data\\CompositeMarketDataProvider.ts",
+        "extension": "ts",
+        "lines": 57,
+        "bytes": 1626,
+        "weight": 75,
+        "reason": "Aggregates market data from multiple sources, central to data provision.",
+        "ignore_in_deep_review": false
+      },
+      {
+        "path": "src\\smart-grid\\infrastructure\\market_data\\LocalCsvMarketDataProvider.ts",
+        "extension": "ts",
+        "lines": 58,
+        "bytes": 1658,
+        "weight": 75,
+        "reason": "Provides market data from local CSV files, important for backtesting and development.",
+        "ignore_in_deep_review": false
+      },
+      {
+        "path": "src\\smart-grid\\infrastructure\\market_data\\SyntheticMarketDataProvider.ts",
+        "extension": "ts",
+        "lines": 54,
+        "bytes": 1630,
+        "weight": 75,
+        "reason": "Provides synthetic market data, useful for testing and simulation.",
+        "ignore_in_deep_review": false
+      },
+      {
+        "path": "src\\shared\\indicators\\IndicatorService.ts",
+        "extension": "ts",
+        "lines": 68,
+        "bytes": 2280,
+        "weight": 70,
+        "reason": "Shared service providing technical indicator calculations, critical for bot logic.",
+        "ignore_in_deep_review": false
+      },
+      {
+        "path": "src\\shared\\utils\\MathUtils.ts",
+        "extension": "ts",
+        "lines": 17,
+        "bytes": 525,
+        "weight": 65,
+        "reason": "Shared utility functions, potentially critical for calculations across the system.",
+        "ignore_in_deep_review": false
+      },
+      {
+        "path": "src\\smart-grid\\infrastructure\\reporting\\HtmlReportGenerator.ts",
+        "extension": "ts",
+        "lines": 86,
+        "bytes": 3002,
+        "weight": 50,
+        "reason": "Generates HTML reports for backtesting and performance analysis.",
+        "ignore_in_deep_review": false
+      },
+      {
+        "path": "src\\smart-grid\\infrastructure\\logger\\ConsoleLogger.ts",
+        "extension": "ts",
+        "lines": 20,
+        "bytes": 530,
+        "weight": 40,
+        "reason": "Basic console logger implementation.",
+        "ignore_in_deep_review": false
+      },
+      {
+        "path": "src\\smart-grid\\ports\\IMarketDataProvider.ts",
+        "extension": "ts",
+        "lines": 11,
+        "bytes": 226,
+        "weight": 30,
+        "reason": "Defines the contract for market data provision.",
+        "ignore_in_deep_review": true
+      },
+      {
+        "path": "src\\smart-grid\\ports\\IOrderExecutor.ts",
+        "extension": "ts",
+        "lines": 21,
+        "bytes": 459,
+        "weight": 30,
+        "reason": "Defines the contract for order execution.",
+        "ignore_in_deep_review": true
+      },
+      {
+        "path": "src\\smart-grid\\domain\\port\\IMarketDataPort.ts",
+        "extension": "ts",
+        "lines": 15,
+        "bytes": 408,
+        "weight": 30,
+        "reason": "Defines the market data interface for the domain.",
+        "ignore_in_deep_review": true
+      },
+      {
+        "path": "src\\smart-grid\\domain\\port\\IOrderExecutorPort.ts",
+        "extension": "ts",
+        "lines": 25,
+        "bytes": 757,
+        "weight": 30,
+        "reason": "Defines the order execution interface for the domain.",
+        "ignore_in_deep_review": true
+      },
+      {
+        "path": "src\\smart-grid\\ports\\IReportGenerator.ts",
+        "extension": "ts",
+        "lines": 7,
+        "bytes": 227,
+        "weight": 25,
+        "reason": "Defines the contract for report generation.",
+        "ignore_in_deep_review": true
+      },
+      {
+        "path": "src\\smart-grid\\domain\\port\\ILoggerPort.ts",
+        "extension": "ts",
+        "lines": 7,
+        "bytes": 240,
+        "weight": 25,
+        "reason": "Defines the logging interface for the application.",
+        "ignore_in_deep_review": true
+      },
+      {
+        "path": "src\\models\\Candle.ts",
+        "extension": "ts",
+        "lines": 9,
+        "bytes": 139,
+        "weight": 5,
+        "reason": "Pure data model definition.",
+        "ignore_in_deep_review": true
+      },
+      {
+        "path": "src\\models\\GridStrategyConfig.ts",
+        "extension": "ts",
+        "lines": 19,
+        "bytes": 516,
+        "weight": 5,
+        "reason": "Pure data model definition.",
+        "ignore_in_deep_review": true
+      },
+      {
+        "path": "src\\models\\Order.ts",
+        "extension": "ts",
+        "lines": 10,
+        "bytes": 205,
+        "weight": 5,
+        "reason": "Pure data model definition.",
+        "ignore_in_deep_review": true
+      },
+      {
+        "path": "src\\models\\Position.ts",
+        "extension": "ts",
+        "lines": 36,
+        "bytes": 948,
+        "weight": 5,
+        "reason": "Pure data model definition.",
+        "ignore_in_deep_review": true
+      },
+      {
+        "path": "src\\models\\Trade.ts",
+        "extension": "ts",
+        "lines": 9,
+        "bytes": 159,
+        "weight": 5,
+        "reason": "Pure data model definition.",
+        "ignore_in_deep_review": true
+      },
+      {
+        "path": "src\\smart-grid\\domain\\model\\Balance.ts",
+        "extension": "ts",
+        "lines": 10,
+        "bytes": 208,
+        "weight": 5,
+        "reason": "Pure data model definition.",
+        "ignore_in_deep_review": true
+      },
+      {
+        "path": "src\\smart-grid\\domain\\model\\Candle.ts",
+        "extension": "ts",
+        "lines": 9,
+        "bytes": 194,
+        "weight": 5,
+        "reason": "Pure data model definition.",
+        "ignore_in_deep_review": true
+      },
+      {
+        "path": "src\\smart-grid\\domain\\model\\GridConfig.ts",
+        "extension": "ts",
+        "lines": 11,
+        "bytes": 373,
+        "weight": 5,
+        "reason": "Pure data model definition.",
+        "ignore_in_deep_review": true
+      },
+      {
+        "path": "src\\smart-grid\\domain\\model\\GridLevel.ts",
+        "extension": "ts",
+        "lines": 6,
+        "bytes": 127,
+        "weight": 5,
+        "reason": "Pure data model definition.",
+        "ignore_in_deep_review": true
+      },
+      {
+        "path": "src\\smart-grid\\domain\\model\\MarketState.ts",
+        "extension": "ts",
+        "lines": 11,
+        "bytes": 284,
+        "weight": 5,
+        "reason": "Pure data model definition.",
+        "ignore_in_deep_review": true
+      }
+    ],
+    "summary": {
+      "total_files": 35,
+      "total_lines": 2300,
+      "high_impact_files": [
+        "src\\smart-grid\\domain\\bot\\SmartGridBot.ts",
+        "src\\smart-grid\\presentation\\cli\\run_bot.ts",
+        "src\\smart-grid\\presentation\\cli\\backtest_cli.ts",
+        "src\\smart-grid\\infrastructure\\config\\EnvConfigLoader.ts",
+        "src\\smart-grid\\application\\usecase\\SyncGridOrdersUseCase.ts",
+        "src\\smart-grid\\infrastructure\\exchange\\BinanceOrderExecutor.ts",
+        "src\\smart-grid\\infrastructure\\execution\\BinanceOrderExecutionService.ts",
+        "src\\smart-grid\\application\\usecases\\RunBacktestUseCase.ts",
+        "src\\smart-grid\\infrastructure\\exchange\\BinanceMarketDataAdapter.ts",
+        "src\\smart-grid\\infrastructure\\market_data\\BinanceMarketDataProvider.ts",
+        "src\\smart-grid\\domain\\service\\CapitalCalculator.ts",
+        "src\\smart-grid\\domain\\service\\GridCalculator.ts",
+        "src\\smart-grid\\infrastructure\\market_data\\CompositeMarketDataProvider.ts",
+        "src\\smart-grid\\infrastructure\\market_data\\LocalCsvMarketDataProvider.ts",
+        "src\\smart-grid\\infrastructure\\market_data\\SyntheticMarketDataProvider.ts",
+        "src\\shared\\indicators\\IndicatorService.ts",
+        "src\\shared\\utils\\MathUtils.ts"
+      ],
+      "ignored_patterns_detected": [
+        "*.model.ts",
+        "*.interface.ts"
+      ]
+    }
+  }
+}

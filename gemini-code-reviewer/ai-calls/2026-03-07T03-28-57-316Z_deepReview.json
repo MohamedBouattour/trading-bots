@@ -1,0 +1,696 @@
+{
+  "call": "deepReview",
+  "model": "gemini-2.5-flash",
+  "timestamp": "2026-03-07T03:28:57.316Z",
+  "durationMs": 96147,
+  "retryCount": 1,
+  "estimatedInputTokens": 12118,
+  "payload": {
+    "model": "gemini-2.5-flash",
+    "project": "vg1p-apps-gemini-code-b1",
+    "request": {
+      "systemInstruction": {
+        "role": "system",
+        "parts": [
+          {
+            "text": "You are an expert software architect performing a focused deep review on a curated subset of high-impact files selected by a prior infra audit.\n\n## Context\nYou receive:\n- Full source of each high-weight file.\n- Their direct imports (source included where relevant to understand runtime behavior).\n- For frontend frameworks (Angular, React, Vue): the paired HTML/template file.\n- Adjacent config files needed to understand module wiring, routing, or environment.\n\n## What is NOT provided\nPure model, interface, enum, and DTO files marked as boilerplate in the audit (weight = 0, ignore_in_deep_review = true).\nDo NOT request them. Do NOT reference them unless a high-weight file has a critical dependency on their structure that causes a real bug or security flaw.\n\n## Review goals\nFor each file, identify:\n1. **Structural problems**: broken module wiring, circular dependencies, wrong abstraction layers.\n2. **Security issues**: injection, XSS, path traversal, hardcoded secrets, overly permissive CORS/auth.\n3. **Reliability risks**: unhandled promise rejections, missing error boundaries, race conditions, memory leaks.\n4. **Maintainability hotspots**: cyclomatic complexity > 10, deep nesting, SRP violations, large god-classes.\n5. **CI/CD & build risks**: misconfigured pipeline steps, secrets in logs, unpinned dependencies with known CVEs.\n\n## Severity scale\n- **HIGH**: Exploitable security flaw or production-breaking reliability issue.\n- **MEDIUM**: Debt that will cause incidents or slow delivery within 1–3 sprints.\n- **LOW**: Worth fixing but no immediate risk.\n\n## Output format\nReturn ONLY a valid JSON object — no markdown, no explanation outside JSON:\n\n```json\n{\n  \"reviewed_files\": [\n    {\n      \"path\": \"src/app/app.module.ts\",\n      \"overall_assessment\": \"Short paragraph on this file's role and health.\",\n      \"complexity_score\": 42,\n      \"issues\": [\n        {\n          \"severity\": \"HIGH\",\n          \"type\": \"SECURITY | RELIABILITY | MAINTAINABILITY | PERFORMANCE | CONFIG\",\n          \"description\": \"Short description of the issue.\",\n          \"evidence\": \"Relevant code snippet or explanation (≤ 15 words).\",\n          \"suggested_fix\": \"Concise, technology-appropriate fix.\"\n        }\n      ]\n    }\n  ],\n  \"repo_level_findings\": [\n    {\n      \"rank\": 1,\n      \"title\": \"Short title\",\n      \"detail\": \"Detailed explanation with file references.\",\n      \"recommended_action\": \"What to do next.\"\n    }\n  ]\n}\n```\n\nRules:\n- Sort `reviewed_files` by severity (files with HIGH issues first).\n- Limit `repo_level_findings` to the top 5–10 cross-cutting concerns only.\n- Avoid micro-nitpicks: flag only issues with real impact on quality, complexity, or infra risk.\n- Do NOT re-review files that were excluded by the audit (boilerplate/ignore_in_deep_review = true)."
+          }
+        ]
+      },
+      "contents": [
+        {
+          "role": "user",
+          "parts": [
+            {
+              "text": "## High-Impact Files Under Review (19 files)\n> Selected by infra audit (weight ≥ threshold, not ignored).\n\n### src\\shared\\indicators\\IndicatorService.ts\n```ts\nexport class IndicatorService { static computeATR(closes: number[], period: number = 14): number { const changes = closes.slice(1).map((c, i) => Math.abs(c - closes[i])); if (changes.length < period) return 0; return changes.slice(-period).reduce((a, b) => a + b, 0) / period; } static computeVolatility(closes: number[], lookback_period: number): number { if (closes.length < 2) return 0.01; const lookback = closes.slice(-lookback_period); const log_ret: number[] = []; for (let i = 1; i < lookback.length; i++) { const prev = lookback[i - 1] === 0 ? 1 : lookback[i - 1]; log_ret.push(Math.log(lookback[i] / prev)); } return log_ret.length > 0 ? MathUtils.stdDev(log_ret) : 0.01; } static computeTrend( closes: number[], trend_period: number, trend_threshold: number, ): \"uptrend\" | \"downtrend\" | \"ranging\" { if (closes.length < trend_period + 1) return \"ranging\"; const n = closes.length; let sum_last = 0; let sum_prev = 0; for (let i = 0; i < trend_period; i++) { sum_last += closes[n - 1 - i]; sum_prev += closes[n - 2 - i]; } const ma_last = sum_last / trend_period; const ma_prev = sum_prev / trend_period; const prev = ma_prev === 0 ? 1 : ma_prev; const slope = (ma_last - ma_prev) / prev; if (slope > trend_threshold) return \"uptrend\"; if (slope < -trend_threshold) return \"downtrend\"; return \"ranging\"; } static computeSMA(data: number[], period: number): number { if (data.length < period) return data[data.length - 1] ?? 0; const slice = data.slice(-period); return slice.reduce((a, b) => a + b, 0) / period; } static computeRSI(data: number[], period: number = 14): number { if (data.length < period + 1) return 50; const slice = data.slice(-(period + 1)); let gains = 0; let losses = 0; for (let i = 1; i < slice.length; i++) { const diff = slice[i] - slice[i - 1]; if (diff >= 0) gains += diff; else losses -= diff; } if (losses === 0) return 100; const rs = gains / period / (losses / period); return 100 - 100 / (1 + rs); } }\n```\n\n### src\\shared\\utils\\MathUtils.ts\n```ts\nexport class MathUtils { static stdDev(array: number[]): number { const n = array.length; if (n === 0) return 0; const mean = array.reduce((a, b) => a + b) / n; return Math.sqrt( array.map((x) => Math.pow(x - mean, 2)).reduce((a, b) => a + b) / n, ); } static linspace(start: number, stop: number, num: number): number[] { if (num <= 1) return [start]; const step = (stop - start) / (num - 1); return Array.from({ length: num }, (_, i) => start + step * i); } }\n```\n\n### src\\smart-grid\\application\\usecase\\SyncGridOrdersUseCase.ts\n```ts\nexport interface SyncGridOrdersInput { readonly config: GridConfig; readonly initialCapital: number; } const PRICE_TOLERANCE = 0.002; const MIN_ORDER_NOTIONAL = 5.5; export class SyncGridOrdersUseCase { constructor( private readonly executor: IOrderExecutorPort, private readonly market: IMarketDataPort, private readonly logger: ILoggerPort, ) {} async execute(input: SyncGridOrdersInput): Promise<void> { const { config, initialCapital } = input; const quoteAsset = config.symbol.endsWith(\"USDT\") ? \"USDT\" : config.symbol.slice(-4); const baseAsset = config.symbol.replace(quoteAsset, \"\"); const [candles, balances, openOrders] = await Promise.all([ this.market.getHistoricalData(config.symbol, \"1h\", 1), this.executor.getAccountBalances(), this.executor.getOpenOrders(config.symbol), ]); const latestCandle = candles[candles.length - 1]; if (!latestCandle) { this.logger.warn(\"[Sync] No candle data returned — aborting.\"); return; } const currentPrice = latestCandle.close; const ZERO_BALANCE: AssetBalance = { asset: \"\", free: 0, locked: 0 }; const baseBalance = balances.find((b) => b.asset === baseAsset) ?? { ...ZERO_BALANCE, asset: baseAsset, }; const quoteBalance = balances.find((b) => b.asset === quoteAsset) ?? { ...ZERO_BALANCE, asset: quoteAsset, }; const state: MarketState = { symbol: config.symbol, baseAsset, quoteAsset, currentPrice, baseBalance, quoteBalance, }; const { effectiveCapital, roiPct, pnlQuote } = computeCapital( quoteBalance, baseBalance, currentPrice, initialCapital, ); const sign = pnlQuote >= 0 ? \"+\" : \"\"; const roiTag = `[ROI: ${roiPct >= 0 ? \"+\" : \"\"}${roiPct.toFixed(2)}% | ${sign}${pnlQuote.toFixed(2)} ${quoteAsset} | Val: ${effectiveCapital.toFixed(2)} ${quoteAsset}]`; this.logger.info( `${roiTag} price=${currentPrice} | ` + `${quoteBalance.free.toFixed(2)} ${quoteAsset} free, ` + `${baseBalance.free.toFixed(2)} ${baseAsset} free`, ); const buyOrders = openOrders.filter((o) => o.side === \"BUY\"); const sellOrders = openOrders.filter((o) => o.side === \"SELL\"); await this.syncSellOrders(state, sellOrders, config.takeProfitPct); await this.syncBuyOrders(state, buyOrders, sellOrders, config); } private async syncSellOrders( state: MarketState, sellOrders: ExchangeOrder[], takeProfitPct: number, ): Promise<void> { const { symbol, baseAsset, quoteAsset, currentPrice, baseBalance } = state; const qtyLockedInSells = sellOrders.reduce((s, o) => s + o.origQty, 0); const totalBase = baseBalance.free + baseBalance.locked; const unhedgedQty = Number( ((totalBase - qtyLockedInSells) * 0.99).toFixed(2), ); if (unhedgedQty <= 0.000001) { this.logger.info(`[SELL] All ${baseAsset} is hedged. Nothing to do.`); return; } const targetSellPrice = Number( (currentPrice * (1 + takeProfitPct / 100)).toFixed(2), ); const alreadyExists = sellOrders.some( (o) => Math.abs(o.price - targetSellPrice) / targetSellPrice < PRICE_TOLERANCE, ); if (unhedgedQty * targetSellPrice < MIN_ORDER_NOTIONAL) { this.logger.warn( `[SELL] Skipped: notional too small ` + `(${unhedgedQty.toFixed(2)} ${baseAsset} × ${targetSellPrice.toFixed(2)} < ${MIN_ORDER_NOTIONAL} ${quoteAsset}).`, ); return; } if ( alreadyExists && !(unhedgedQty * targetSellPrice > MIN_ORDER_NOTIONAL) ) { this.logger.info( `[SELL] Sell order already exists near ${targetSellPrice.toFixed(2)} ${quoteAsset}.`, ); return; } this.logger.info( `[SELL] Placing LIMIT SELL ${unhedgedQty.toFixed(2)} ${baseAsset}` + ` @ ${targetSellPrice.toFixed(2)} ${quoteAsset} (TP: +${takeProfitPct}%)`, ); await this.executor.placeLimitOrder( symbol, \"SELL\", targetSellPrice, unhedgedQty, ); } private async syncBuyOrders( state: MarketState, buyOrders: ExchangeOrder[], sellOrders: ExchangeOrder[], config: GridConfig, ): Promise<void> { const { symbol, currentPrice, quoteAsset, quoteBalance } = state; const perOrderBudget = Math.trunc(quoteBalance.free / config.gridCount); const closestPriceEntry = Math.max(...buyOrders.map((o) => o.price)); if ( buyOrders.length == 15 && (closestPriceEntry - currentPrice) / closestPriceEntry ) { this.logger.info( `[SKIP] Price in Range.${(((closestPriceEntry - currentPrice) / closestPriceEntry) * 100).toFixed(2)}%. Current Price ${currentPrice}. waiting for ${buyOrders.length} orders to be filled`, ); return; } if (perOrderBudget < MIN_ORDER_NOTIONAL) { this.logger.warn( `[BUY] Insufficient ${quoteAsset}: budget per order = ${perOrderBudget.toFixed(2)} < min ${MIN_ORDER_NOTIONAL}.`, ); return; } const targetLevels = computeBuyGrid(currentPrice, perOrderBudget, config); for (const ob of buyOrders) { const stillValid = targetLevels.some( (lvl) => Math.abs(lvl.price - ob.price) / ob.price < PRICE_TOLERANCE, ); if (!stillValid) { this.logger.info( `[BUY] Cancelling stale order #${ob.orderId} @ ${ob.price.toFixed(2)}`, ); await this.executor.cancelOrder(symbol, ob.orderId); } } let placed = 0; let kept = 0; for (const lvl of targetLevels) { const exists = buyOrders.some( (ob) => Math.abs(ob.price - lvl.price) / lvl.price < PRICE_TOLERANCE, ); if (exists) { kept++; continue; } const targetSellPrice = lvl.price * (1 + config.takeProfitPct / 100); const hasActivePosition = sellOrders.some( (so) => Math.abs(so.price - targetSellPrice) / targetSellPrice < PRICE_TOLERANCE, ); if (hasActivePosition) { this.logger.info( `[BUY] Level ${lvl.price.toFixed(2)} skipped: position already active (TP @ ${targetSellPrice.toFixed(2)})`, ); kept++; continue; } try { await this.executor.placeLimitOrder( symbol, \"BUY\", lvl.price, lvl.quantity, ); placed++; } catch (err) { this.logger.error( `[BUY] Failed to place order @ ${lvl.price.toFixed(2)} — stopping grid placement.`, err, ); break; } } this.logger.info(`[BUY] Grid sync done: ${placed} placed, ${kept} kept.`); } }\n```\n\n### src\\smart-grid\\application\\usecases\\RunBacktestUseCase.ts\n```ts\nexport class RunBacktestUseCase { constructor( private marketDataProvider: IMarketDataProvider, private reportGenerator: IReportGenerator, ) {} async execute( config: GridStrategyConfig, outputPath: string, months: number = 6, timeframe: string = \"1h\", ): Promise<void> { console.log(\"=\".repeat(60)); console.log(\" Smart Grid Trading Bot — Backtester (TS)\"); console.log(\"=\".repeat(60)); const symbol = config.symbol ?? \"BTCUSDT\"; const df = await this.marketDataProvider.getHistoricalData( symbol, timeframe, 1000, months, ); if (df.length === 0) { console.log(\"No data available.\"); return; } const startDate = new Date(df[0].timestamp).toLocaleDateString(); const endDate = new Date(df[df.length - 1].timestamp).toLocaleDateString(); console.log(` Data range : ${startDate} → ${endDate}`); console.log(` Total rows : ${df.length}`); const bot = new SmartGridBot(config); const closes: number[] = []; const volumes: number[] = []; console.log(`\\n Running backtest on ${df.length} candles...`); for (const row of df) { closes.push(row.close); volumes.push(row.volume); const window = closes.slice(-210); bot.on_candle( row.timestamp, row.open, row.high, row.low, row.close, window, volumes.slice(-50), ); } const results = bot.summary(); console.log(\"\\n\" + \"=\".repeat(60)); console.log(\" Performance Summary\"); console.log(\"=\".repeat(60)); for (const [k, v] of Object.entries(results)) { const label = k .replace(/_/g, \" \") .replace(/\\b\\w/g, (l) => l.toUpperCase()); console.log(` ${label.padEnd(25)} ${v}`); } this.reportGenerator.generateReport(df, bot, outputPath); console.log(\"\\nDone.\"); } }\n```\n\n### src\\smart-grid\\domain\\bot\\SmartGridBot.ts\n```ts\nexport interface BotSummary { period: string; duration: string; initial_balance: string; final_value: string; total_profit: string; roi_pct: string; total_trades: number; max_drawdown_pct: string; } export class SmartGridBot { symbol: string; balance: number; initial_balance: number; grid_density: number; qty_per_order: number; volatility_lookback: number; trend_period: number; trend_threshold: number; take_profit_pct: number; stop_loss_pct: number; trailing_stop_pct: number; martingale_factor: number; max_exposure_pct: number; max_drawdown_exit_pct: number; max_order_cost_pct: number; tp_volatility_multiplier: number; order_ttl_candles: number; private readonly TRADE_LOG_LIMIT = 10_000; private _candle_counter: number = 0; private _last_volatility: number = 0; private _order_counter: number = 0; open_orders: Map<number, Order> = new Map(); positions: Position[] = []; grid_levels: number[] = []; grid_lower: number = 0.0; grid_upper: number = 0.0; trend: \"uptrend\" | \"downtrend\" | \"ranging\" = \"ranging\"; equity_curve: number[]; trade_log: Trade[] = []; private _peak_equity: number; private _emergency_exit: boolean = false; private _start_timestamp: number | null = null; private _end_timestamp: number | null = null; constructor(config: GridStrategyConfig = {}) { this.symbol = config.symbol ?? \"BTC/USDT\"; this.initial_balance = config.initial_balance ?? 500.0; this.balance = this.initial_balance; this.grid_density = config.grid_density ?? 100; this.qty_per_order = config.qty_per_order ?? 0.0; this.volatility_lookback = config.volatility_lookback ?? 24; this.trend_period = config.trend_period ?? 200; this.trend_threshold = config.trend_threshold ?? 0.002; this.take_profit_pct = config.take_profit_pct ?? 0.8; this.stop_loss_pct = config.stop_loss_pct ?? 2.0; this.trailing_stop_pct = config.trailing_stop_pct ?? 0; this.martingale_factor = config.martingale_factor ?? 3.0; this.max_exposure_pct = config.max_exposure_pct ?? 60; this.max_drawdown_exit_pct = config.max_drawdown_exit_pct ?? 10.0; this.max_order_cost_pct = config.max_order_cost_pct ?? 2; this.tp_volatility_multiplier = config.tp_volatility_multiplier ?? 1.5; this.order_ttl_candles = config.order_ttl_candles ?? 48; this.equity_curve = [this.initial_balance]; this._peak_equity = this.initial_balance; } private _next_id(): number { this._order_counter += 1; return this._order_counter; } public on_candle( timestamp: number, open_: number, high: number, low: number, close: number, closes_history: number[], volumes_history: number[] = [], ): void { this._candle_counter++; if (this._start_timestamp === null) this._start_timestamp = timestamp; this._end_timestamp = timestamp; const trend = IndicatorService.computeTrend( closes_history, this.trend_period, this.trend_threshold, ); const volatility = IndicatorService.computeVolatility( closes_history, this.volatility_lookback, ); this._last_volatility = volatility; const sma200 = IndicatorService.computeSMA(closes_history, 200); const sma50 = IndicatorService.computeSMA(closes_history, 50); const rsi = IndicatorService.computeRSI(closes_history, 14); const atr = IndicatorService.computeATR(closes_history, 14); const avg_vol_5 = volumes_history.length >= 5 ? volumes_history.slice(-5).reduce((a, b) => a + b, 0) / 5 : 0; const current_vol = volumes_history.length > 0 ? volumes_history[volumes_history.length - 1] : 0; const volume_declining = avg_vol_5 > 0 && current_vol < avg_vol_5 * 0.8; const recent_high_14 = closes_history.length >= 14 ? Math.max(...closes_history.slice(-14)) : close; const atr_dip_ok = atr > 0 ? recent_high_14 - close >= atr * 0.5 : true; this.trend = trend; const is_bull_market = close > sma200; const is_golden_cross = sma50 > sma200; const is_strong_downtrend = trend === \"downtrend\" && !is_bull_market; const btc_held_qty = this.positions.reduce((sum, p) => sum + p.quantity, 0); const btc_value = btc_held_qty * close; let locked_balance = 0; for (const order of this.open_orders.values()) { if (order.side === \"buy\") { locked_balance += order.price * order.quantity; } } const current_total_equity = this.balance + btc_value + locked_balance; const exposure_pct = (btc_value / current_total_equity) * 100; if (current_total_equity > this._peak_equity) { this._peak_equity = current_total_equity; } const current_dd_pct = ((this._peak_equity - current_total_equity) / this._peak_equity) * 100; if ( this.max_drawdown_exit_pct > 0 && current_dd_pct >= this.max_drawdown_exit_pct && !this._emergency_exit ) { this._emergency_exit = true; this._cancel_all_orders(); this._liquidate_all(close, timestamp, \"emergency_dd_exit\"); } if ( this._emergency_exit && current_dd_pct < this.max_drawdown_exit_pct * 0.5 ) { this._emergency_exit = false; } this._rebuild_grid(close, volatility, is_strong_downtrend, exposure_pct); this._simulate_fills(timestamp, low, high); this._manage_positions(timestamp, low, high, close, exposure_pct); this._cancel_stale_orders(close); const can_add_exposure = exposure_pct < this.max_exposure_pct; const rsi_allows = (rsi < 35 && (volume_declining || atr_dip_ok)) || (trend === \"uptrend\" && is_golden_cross && rsi < 55); const not_in_crash = !is_strong_downtrend || rsi < 25; const can_buy = can_add_exposure && rsi_allows && not_in_crash && !this._emergency_exit; if (can_buy) { this._place_buy_orders(close, is_strong_downtrend); } this._place_sell_orders(close, is_strong_downtrend); this._dedup_positions(); this.equity_curve.push(current_total_equity); if (this.equity_curve.length > 5_000) this.equity_curve.shift(); } private _rebuild_grid( current_price: number, volatility: number, is_strong_downtrend: boolean, exposure_pct: number, ): void { if (!isFinite(volatility) || volatility <= 0) return; const margin = (this.grid_upper - this.grid_lower) * 0.2; if ( this.grid_levels.length > 0 && current_price > this.grid_lower + margin && current_price < this.grid_upper - margin ) { return; } const effective_density = is_strong_downtrend ? Math.floor(this.grid_density * 0.6) : this.grid_density; const range_multiplier = is_strong_downtrend ? 6.0 : 4.0; const half_range = current_price * volatility * range_multiplier * Math.sqrt(this.volatility_lookback); let bias = 0.0; if (this.trend === \"uptrend\") bias = half_range * 0.15; if (this.trend === \"downtrend\") bias = -half_range * 0.15; this.grid_lower = current_price - half_range + bias; this.grid_upper = current_price + half_range + bias; this.grid_levels = MathUtils.linspace( this.grid_lower, this.grid_upper, effective_density, ); const base_allocation = is_strong_downtrend ? 0.3 : 0.8; const size_reduction_factor = Math.max(0.2, 1 - exposure_pct / 100); const available_capital = this.balance * base_allocation * size_reduction_factor; const levels_to_fill = Math.max(1, Math.floor(effective_density / 2)); const raw_qty = available_capital / levels_to_fill / current_price; const min_notional = 5.5; this.qty_per_order = Math.max(raw_qty, min_notional / current_price); this._cancel_all_orders(); } private _cancel_all_orders(): void { for (const [oid, o] of this.open_orders.entries()) { if (o.side === \"buy\") { this.balance += o.price * o.quantity; } this.open_orders.delete(oid); } } private _place_buy_orders( current_price: number, is_strong_downtrend: boolean, ): void { const buy_levels = this.grid_levels .filter((lvl) => lvl < current_price) .reverse(); const existing_prices = new Set<number>(); for (const order of this.open_orders.values()) { if (order.side === \"buy\") { existing_prices.add(this._round_price(order.price)); } } const max_levels = is_strong_downtrend ? 3 : 15; let placed = 0; for (const [idx, level] of buy_levels.entries()) { if (placed >= max_levels) break; const rounded_level = this._round_price(level); if (!existing_prices.has(rounded_level)) { const depth_factor = 1 + idx * (this.martingale_factor - 1) * 0.25; let multiplier = depth_factor; if (this.trend === \"uptrend\") multiplier *= 1.2; if (is_strong_downtrend) multiplier *= 0.5; const raw_qty = this.qty_per_order * multiplier; const total_equity = this.balance + this.positions.reduce((s, p) => s + p.quantity * level, 0); const max_cost_per_order = total_equity * (this.max_order_cost_pct / 100); const qty = Math.min(raw_qty, max_cost_per_order / level); const cost = level * qty; if (cost < 5.2) { continue; } if (this.balance >= cost && qty > 0) { const oid = this._next_id(); this.open_orders.set(oid, { order_id: oid, side: \"buy\", price: level, quantity: qty, status: \"open\", opened_at: this._candle_counter, }); this.balance -= cost; placed++; } } } } private _place_sell_orders( current_price: number, is_strong_downtrend: boolean, ): void { let available_qty = this.positions.reduce((s, p) => s + p.quantity, 0); const existing_sell_prices = new Set<number>(); for (const order of this.open_orders.values()) { if (order.side === \"sell\") { existing_sell_prices.add(this._round_price(order.price)); available_qty -= order.quantity; } } if (available_qty <= 0) return; const max_levels = is_strong_downtrend ? 3 : 15; const sell_levels = this.grid_levels .filter((lvl) => lvl > current_price) .slice(0, max_levels); for (const level of sell_levels) { if (available_qty <= 0) break; const rounded = this._round_price(level); if (existing_sell_prices.has(rounded)) continue; const sell_qty = Math.min(this.qty_per_order, available_qty); if (sell_qty * level < 5.2) continue; const oid = this._next_id(); this.open_orders.set(oid, { order_id: oid, side: \"sell\", price: level, quantity: sell_qty, status: \"open\", opened_at: this._candle_counter, }); available_qty -= sell_qty; } } private _round_price(p: number): number { return Math.round(p * 100) / 100; } private _cancel_stale_orders(current_price: number): void { const TTL = this.order_ttl_candles; const stale: number[] = []; for (const [oid, o] of this.open_orders.entries()) { const price_stale = o.side === \"buy\" && o.price > current_price; const age_stale = o.opened_at !== undefined && this._candle_counter - o.opened_at > TTL; if (price_stale || age_stale) stale.push(oid); } for (const oid of stale) { const o = this.open_orders.get(oid)!; this.open_orders.delete(oid); if (o.side === \"buy\") this.balance += o.price * o.quantity; } } private _simulate_fills(timestamp: number, low: number, high: number): void { const filled_ids: number[] = []; for (const [oid, order] of this.open_orders.entries()) { if (order.side === \"buy\" && low <= order.price && order.price <= high) { order.status = \"filled\"; order.fill_price = order.price; filled_ids.push(oid); const dynamic_tp_pct = Math.max( this.take_profit_pct, this._last_volatility * 100 * this.tp_volatility_multiplier, ); const tp_price = order.price * (1 + dynamic_tp_pct / 100); const sl_price = this.stop_loss_pct > 0 ? order.price * (1 - this.stop_loss_pct / 100) : 0; const pos = new Position( order.price, order.quantity, tp_price, sl_price, 0, ); this.positions.push(pos); this.trade_log.push({ timestamp: timestamp, side: \"buy\", price: order.price, quantity: order.quantity, }); if (this.trade_log.length > this.TRADE_LOG_LIMIT) this.trade_log.shift(); } else if ( order.side === \"sell\" && order.price >= low && order.price <= high ) { order.status = \"filled\"; order.fill_price = order.price; filled_ids.push(oid); const proceeds = order.price * order.quantity; this.balance += proceeds; this._consume_positions_fifo(order.quantity, order.price, timestamp); } } for (const oid of filled_ids) { this.open_orders.delete(oid); } } private _manage_positions( timestamp: number, low: number, high: number, close: number, exposure_pct: number, ): void { const remaining: Position[] = []; for (const pos of this.positions) { let exited = false; let exit_price: number | null = null; let reason: string | null = null; if (high > pos.highest_price_seen) { pos.highest_price_seen = high; } const exposure_tp_factor = exposure_pct > 40 ? 0.6 : exposure_pct > 25 ? 0.8 : 1.0; const base_tp = pos.take_profit_price; const adjusted_tp_from_exposure = pos.entry_price + (base_tp - pos.entry_price) * exposure_tp_factor; const adjusted_tp = this.trend === \"downtrend\" ? Math.min(pos.entry_price * 1.008, adjusted_tp_from_exposure) : adjusted_tp_from_exposure; if (high >= adjusted_tp) { exit_price = adjusted_tp; reason = \"take_profit\"; exited = true; } if (!exited && pos.stop_loss_price > 0 && low <= pos.stop_loss_price) { exit_price = pos.stop_loss_price; reason = \"stop_loss\"; exited = true; } if ( !exited && this.trailing_stop_pct > 0 && pos.highest_price_seen > pos.entry_price ) { const trail_price = pos.highest_price_seen * (1 - this.trailing_stop_pct / 100); if (trail_price > pos.entry_price && low <= trail_price) { exit_price = trail_price; reason = \"trailing_stop\"; exited = true; } } if (exited && exit_price !== null) { const proceeds = exit_price * pos.quantity; this.balance += proceeds; this.trade_log.push({ timestamp: timestamp, side: \"sell\", price: exit_price, quantity: pos.quantity, reason: reason, pnl: proceeds - pos.entry_price * pos.quantity, }); if (this.trade_log.length > this.TRADE_LOG_LIMIT) this.trade_log.shift(); } else { remaining.push(pos); } } this.positions = remaining; } private _consume_positions_fifo( qty_to_sell: number, sell_price: number, timestamp: number, ): void { let remaining = qty_to_sell; const kept: Position[] = []; for (const pos of this.positions) { if (remaining <= 0) { kept.push(pos); continue; } if (pos.quantity <= remaining) { remaining -= pos.quantity; this.trade_log.push({ timestamp, side: \"sell\", price: sell_price, quantity: pos.quantity, reason: \"grid_sell\", pnl: (sell_price - pos.entry_price) * pos.quantity, }); if (this.trade_log.length > this.TRADE_LOG_LIMIT) this.trade_log.shift(); } else { pos.quantity -= remaining; this.trade_log.push({ timestamp, side: \"sell\", price: sell_price, quantity: remaining, reason: \"grid_sell\", pnl: (sell_price - pos.entry_price) * remaining, }); if (this.trade_log.length > this.TRADE_LOG_LIMIT) this.trade_log.shift(); remaining = 0; kept.push(pos); } } this.positions = kept; } private _dedup_positions(): void { if (this.positions.length < 2) return; const sorted = [...this.positions].sort( (a, b) => a.entry_price - b.entry_price, ); const merged: Position[] = []; let cur = sorted[0]; for (let i = 1; i < sorted.length; i++) { const next = sorted[i]; const diff = Math.abs(next.entry_price - cur.entry_price) / cur.entry_price; if (diff <= 0.005) { const total_qty = cur.quantity + next.quantity; const avg_entry = (cur.entry_price * cur.quantity + next.entry_price * next.quantity) / total_qty; const avg_tp = (cur.take_profit_price * cur.quantity + next.take_profit_price * next.quantity) / total_qty; const min_sl = cur.stop_loss_price > 0 && next.stop_loss_price > 0 ? Math.min(cur.stop_loss_price, next.stop_loss_price) : 0; const new_pos = new Position(avg_entry, total_qty, avg_tp, min_sl, 0); new_pos.highest_price_seen = Math.max( cur.highest_price_seen, next.highest_price_seen, ); cur = new_pos; } else { merged.push(cur); cur = next; } } merged.push(cur); this.positions = merged; } public summary(): BotSummary { const final_equity = this.equity_curve.length > 0 ? this.equity_curve[this.equity_curve.length - 1] : this.initial_balance; const profit = final_equity - this.initial_balance; const roi = (profit / this.initial_balance) * 100; let max_dd = 0; let peak = this.equity_curve[0] || this.initial_balance; for (const eq of this.equity_curve) { if (eq > peak) peak = eq; const drawdown = (peak - eq) / peak; if (drawdown > max_dd) max_dd = drawdown; } max_dd *= 100; const sells = this.trade_log.filter((t) => t.side === \"sell\"); let duration_str = \"N/A\"; if (this._start_timestamp && this._end_timestamp) { const start = new Date(this._start_timestamp); const end = new Date(this._end_timestamp); const diffMs = end.getTime() - start.getTime(); const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24)); const diffMonths = (diffDays / 30.44).toFixed(1); duration_str = `${diffDays} days (~${diffMonths} months)`; } return { period: `${new Date(this._start_timestamp ?? 0).toLocaleDateString()} to ${new Date(this._end_timestamp ?? 0).toLocaleDateString()}`, duration: duration_str, initial_balance: Number(this.initial_balance.toFixed(2)) + \" $\", final_value: Number(final_equity.toFixed(2)) + \" $\", total_profit: Number(profit.toFixed(2)) + \" $\", roi_pct: Number(roi.toFixed(2)) + \" %\", total_trades: sells.length, max_drawdown_pct: Number(max_dd.toFixed(2)) + \" %\", }; } private _liquidate_all( current_price: number, timestamp: number, reason: string, ): void { for (const pos of this.positions) { const proceeds = current_price * pos.quantity; this.balance += proceeds; this.trade_log.push({ timestamp: timestamp, side: \"sell\", price: current_price, quantity: pos.quantity, reason: reason, pnl: proceeds - pos.entry_price * pos.quantity, }); if (this.trade_log.length > this.TRADE_LOG_LIMIT) this.trade_log.shift(); } this.positions = []; } }\n```\n\n### src\\smart-grid\\domain\\service\\CapitalCalculator.ts\n```ts\nexport interface CapitalSnapshot { readonly effectiveCapital: number; readonly roiPct: number; readonly pnlQuote: number; } export function computeCapital( quoteBalance: AssetBalance, baseBalance: AssetBalance, currentPrice: number, initialCapital: number, ): CapitalSnapshot { const totalQuote = quoteBalance.free + quoteBalance.locked; const totalBase = baseBalance.free + baseBalance.locked; const realCapital = totalQuote + totalBase * currentPrice; const effectiveCapital = realCapital > 0 ? realCapital : initialCapital; const pnlQuote = effectiveCapital - initialCapital; const roiPct = (pnlQuote / initialCapital) * 100; return { effectiveCapital, roiPct, pnlQuote }; }\n```\n\n### src\\smart-grid\\domain\\service\\GridCalculator.ts\n```ts\nexport function computeBuyGrid( currentPrice: number, perOrderBudget: number, config: GridConfig, ): GridLevel[] { const stepPct = config.swingPct / config.gridCount / 100; return Array.from({ length: config.gridCount }, (_, i) => { const price = round2(currentPrice * (1 - stepPct * (i + 1))); const quantity = round2(perOrderBudget / price); const takeProfitPrice = round2(price * (1 + config.takeProfitPct / 100)); return { price, quantity, takeProfitPrice }; }); } function round2(value: number): number { return parseFloat(value.toFixed(2)); }\n```\n\n### src\\smart-grid\\infrastructure\\config\\EnvConfigLoader.ts\n```ts\nfunction loadEnvSilently(): void { const noop = (): void => {}; const origLog = console.log; const origInfo = console.info; console.log = noop; console.info = noop; dotenv.config({ path: path.join(process.cwd(), \".env\") }); console.log = origLog; console.info = origInfo; } const _originalEmitWarning = process.emitWarning; process.emitWarning = function ( warning: string | Error, ...args: unknown[] ): void { if (args[0] === \"DeprecationWarning\") return; (_originalEmitWarning as any)(warning, ...args); } as typeof process.emitWarning; export interface AppConfig { readonly apiKey: string; readonly apiSecret: string; readonly initialCapital: number; readonly grid: GridConfig; } function requireEnv(key: string): string { const val = process.env[key]; if (!val) throw new Error(`Missing required environment variable: ${key}`); return val; } function optionalFloat(key: string, fallback: number): number { return parseFloat(process.env[key] ?? String(fallback)); } function optionalInt(key: string, fallback: number): number { return parseInt(process.env[key] ?? String(fallback), 10); } export function loadConfig(): AppConfig { loadEnvSilently(); const symbol = (process.env.ASSET ?? \"BTCUSDT\").replace(/['\"/]/g, \"\"); return { apiKey: requireEnv(\"API_KEY\"), apiSecret: requireEnv(\"SECRET_KEY\"), initialCapital: optionalFloat(\"BALANCE\", 500), grid: { symbol, gridCount: optionalInt(\"GRID_COUNT\", 15), swingPct: optionalFloat(\"SWING_PCT\", 15), takeProfitPct: optionalFloat(\"TAKE_PROFIT_PCT\", 1), }, }; }\n```\n\n### src\\smart-grid\\infrastructure\\exchange\\BinanceMarketDataAdapter.ts\n```ts\nconst BINANCE_KLINES_URL = \"https://api.binance.com/api/v3/klines\"; export class BinanceMarketDataAdapter implements IMarketDataPort { async getHistoricalData( symbol: string, interval: string, limit: number, ): Promise<Candle[]> { try { const response = await axios.get(BINANCE_KLINES_URL, { params: { symbol, interval, limit }, timeout: 30_000, }); return response.data.map((row: any[]): Candle => ({ timestamp: Number(row[0]), open: Number(row[1]), high: Number(row[2]), low: Number(row[3]), close: Number(row[4]), volume: Number(row[5]), })); } catch (error) { throw new Error(`[BinanceMarketDataAdapter] Failed to fetch klines: ${String(error)}`); } } }\n```\n\n### src\\smart-grid\\infrastructure\\exchange\\BinanceOrderExecutor.ts\n```ts\ninterface BinanceFilter { filterType: string; tickSize?: string; stepSize?: string; } interface BinanceSymbolInfo { symbol: string; filters: BinanceFilter[]; } export class BinanceOrderExecutor implements IOrderExecutorPort { private readonly client: BinanceRest; private timeOffset = 0; private isTimeSynced = false; private exchangeInfo: { symbols: BinanceSymbolInfo[] } | null = null; constructor(apiKey: string, apiSecret: string) { this.client = Binance({ apiKey, apiSecret, getTime: () => Date.now() + this.timeOffset, }); } private async ensureTimeSync(): Promise<void> { if (this.isTimeSynced) return; try { const serverTime = await this.client.time(); this.timeOffset = Number(serverTime) - Date.now(); this.isTimeSynced = true; } catch { } } private async getSymbolFilters( symbol: string, ): Promise<{ tickSize: string; stepSize: string }> { await this.ensureTimeSync(); if (!this.exchangeInfo) { this.exchangeInfo = (await this.client.exchangeInfo()) as { symbols: BinanceSymbolInfo[]; }; } const exchangeInfo = this.exchangeInfo; const info = exchangeInfo.symbols.find((s) => s.symbol === symbol); if (!info) throw new Error(`Symbol ${symbol} not found in exchange info.`); const priceFilter = info.filters.find( (f: { filterType: string }) => f.filterType === \"PRICE_FILTER\", ); const lotSize = info.filters.find( (f: { filterType: string }) => f.filterType === \"LOT_SIZE\", ); return { tickSize: priceFilter?.tickSize ?? \"0.01\", stepSize: lotSize?.stepSize ?? \"0.0001\", }; } private roundByStep(value: number, step: string): string { const stepNum = parseFloat(step); if (isNaN(stepNum) || stepNum === 0) return value.toString(); const precision = step.includes(\".\") ? step.split(\".\")[1].replace(/0+$/, \"\").length : 0; const multiplier = Math.pow(10, precision); const roundedInt = Math.floor( Math.round(value * multiplier) / Math.round(stepNum * multiplier), ) * Math.round(stepNum * multiplier); return (roundedInt / multiplier).toFixed(precision); } async getAccountBalances(): Promise<AssetBalance[]> { await this.ensureTimeSync(); const info = await this.client.accountInfo(); return info.balances .filter((b) => parseFloat(b.free) + parseFloat(b.locked) > 0) .map((b) => ({ asset: b.asset, free: parseFloat(b.free), locked: parseFloat(b.locked), })); } async getOpenOrders(symbol: string): Promise<ExchangeOrder[]> { await this.ensureTimeSync(); const orders = await this.client.openOrders({ symbol }); return (orders as any[]).map((o) => ({ orderId: Number(o.orderId), symbol: o.symbol, side: o.side as \"BUY\" | \"SELL\", price: parseFloat(o.price), origQty: parseFloat(o.origQty), status: o.status, })); } async placeLimitOrder( symbol: string, side: \"BUY\" | \"SELL\", price: number, quantity: number, ): Promise<void> { await this.ensureTimeSync(); const { tickSize, stepSize } = await this.getSymbolFilters(symbol); const roundedPrice = this.roundByStep(price, tickSize); const roundedQty = this.roundByStep(quantity, stepSize); await this.client.order({ symbol, side: side as unknown as OrderSide, type: OrderType.LIMIT, price: roundedPrice, quantity: roundedQty, timeInForce: \"GTC\" as TimeInForce, }); } async cancelOrder(symbol: string, orderId: number): Promise<void> { await this.ensureTimeSync(); await this.client.cancelOrder({ symbol, orderId }); } }\n```\n\n### src\\smart-grid\\infrastructure\\execution\\BinanceOrderExecutionService.ts\n```ts\ninterface BinanceFilter { filterType: string; tickSize?: string; stepSize?: string; } interface BinanceSymbol { symbol: string; filters: BinanceFilter[]; } interface BinanceExchangeInfo { symbols: BinanceSymbol[]; } export class BinanceOrderExecutionService implements IOrderExecutor { private client: BinanceRest; private timeOffset: number = 0; private isTimeSynced: boolean = false; constructor(apiKey: string, apiSecret: string) { this.client = Binance({ apiKey, apiSecret, getTime: () => Date.now() + this.timeOffset, }); } private exchangeInfo: BinanceExchangeInfo | null = null; private async ensureTimeSync() { if (!this.isTimeSynced) { try { const serverTime = await this.client.time(); this.timeOffset = Number(serverTime) - Date.now(); this.isTimeSynced = true; console.log( `[Binance] Time synchronized. Local offset: ${this.timeOffset}ms`, ); } catch (_error) { console.warn(\"[Binance] Time sync failed, using local time.\"); } } } private async getSymbolFilters(symbol: string) { await this.ensureTimeSync(); if (!this.exchangeInfo) { this.exchangeInfo = await this.client.exchangeInfo(); } const symbolInfo = this.exchangeInfo!.symbols.find( (s: BinanceSymbol) => s.symbol === symbol, ); if (!symbolInfo) throw new Error(`Symbol ${symbol} not found in exchange info.`); const priceFilter = symbolInfo.filters.find( (f: BinanceFilter) => f.filterType === \"PRICE_FILTER\", ); const lotSize = symbolInfo.filters.find( (f: BinanceFilter) => f.filterType === \"LOT_SIZE\", ); return { tickSize: priceFilter?.tickSize || \"0.01\", stepSize: lotSize?.stepSize || \"0.0001\", }; } private roundByStep(value: number, step: string): string { const stepNum = parseFloat(step); if (isNaN(stepNum) || stepNum === 0) return value.toString(); let precision = 0; if (step.includes(\".\")) { precision = step.split(\".\")[1].replace(/0+$/, \"\").length; } const multiplier = Math.pow(10, precision); const valInt = Math.round(value * multiplier); const stepInt = Math.round(stepNum * multiplier); const roundedInt = Math.floor(valInt / stepInt) * stepInt; const roundedVal = roundedInt / multiplier; return roundedVal.toFixed(precision); } async openMarketOrder( symbol: string, side: \"BUY\" | \"SELL\", quoteQty: number, testOnly: boolean = false, ): Promise<void> { await this.ensureTimeSync(); try { console.log( `Opening ${side} order for ${symbol}. Quote Amount: ${quoteQty}`, ); const orderOptions = { symbol: symbol, side: side as unknown as OrderSide, type: OrderType.MARKET, quoteOrderQty: quoteQty.toFixed(2), }; if (testOnly) { console.log(\"--- TEST MODE: Sending test order ---\"); await this.client.orderTest(orderOptions); } else { console.log(\"--- LIVE MODE: Sending market order ---\"); await this.client.order(orderOptions); } } catch (error) { console.error(`Failed to execute order:`, error); throw error; } } async getAccountBalances(): Promise< { asset: string; free: string; locked: string }[] > { await this.ensureTimeSync(); try { const info = await this.client.accountInfo(); return info.balances; } catch (error) { console.error(\"Failed to fetch account info:\", error); return []; } } async placeLimitOrder( symbol: string, side: \"BUY\" | \"SELL\", price: number, quantity: number, testOnly: boolean = false, ): Promise<unknown> { await this.ensureTimeSync(); try { const { tickSize, stepSize } = await this.getSymbolFilters(symbol); const roundedPrice = this.roundByStep(price, tickSize); const roundedQty = this.roundByStep(quantity, stepSize); console.log( `Placing LIMIT ${side} for ${symbol} @ ${roundedPrice} qty: ${roundedQty} (Full precision was: ${price} @ ${quantity})`, ); const orderOptions = { symbol: symbol, side: side as unknown as OrderSide, type: OrderType.LIMIT, price: roundedPrice, quantity: roundedQty, timeInForce: \"GTC\" as TimeInForce, }; if (testOnly) { console.log(\"--- TEST MODE: Sending test limit order ---\"); return await this.client.orderTest(orderOptions); } else { console.log(\"--- LIVE MODE: Sending limit order ---\"); return await this.client.order(orderOptions); } } catch (error) { console.error(`Failed to place limit order:`, error); throw error; } } async cancelOrder(symbol: string, orderId: number): Promise<void> { await this.ensureTimeSync(); try { console.log(`Cancelling order ${orderId} for ${symbol}`); await this.client.cancelOrder({ symbol: symbol, orderId: orderId, }); } catch (error) { console.error(`Failed to cancel order ${orderId}:`, error); } } async getOpenOrders(symbol: string): Promise<unknown[]> { await this.ensureTimeSync(); try { return await this.client.openOrders({ symbol }); } catch (error: unknown) { console.error(\"Failed to fetch open orders:\", (error as Error).message); return []; } } }\n```\n\n### src\\smart-grid\\infrastructure\\logger\\ConsoleLogger.ts\n```ts\nexport class ConsoleLogger implements ILoggerPort { private timestamp(): string { return new Date().toISOString(); } info(message: string): void { console.log(`[${this.timestamp()}] INFO ${message}`); } warn(message: string): void { console.warn(`[${this.timestamp()}] WARN ${message}`); } error(message: string, error?: unknown): void { console.error(`[${this.timestamp()}] ERROR ${message}`, error ?? \"\"); } }\n```\n\n### src\\smart-grid\\infrastructure\\market_data\\BinanceMarketDataProvider.ts\n```ts\nexport class BinanceMarketDataProvider implements IMarketDataProvider { private readonly BINANCE_KLINES_URL = \"https://api.binance.com/api/v3/klines\"; async getHistoricalData( symbol: string = \"BTCUSDT\", interval: string = \"1h\", limit: number = 1000, months: number = 6, ): Promise<Candle[]> { const end_ms = Date.now(); let start_ms = end_ms - months * 30 * 24 * 60 * 60 * 1000; const rows: Candle[] = []; while (start_ms < end_ms) { try { const resp = await axios.get(this.BINANCE_KLINES_URL, { params: { symbol: symbol, interval: interval, startTime: start_ms, endTime: end_ms, limit: limit, }, timeout: 30000, }); const data = resp.data; if (!data || data.length === 0) break; for (const row of data) { rows.push({ timestamp: Number(row[0]), open: Number(row[1]), high: Number(row[2]), low: Number(row[3]), close: Number(row[4]), volume: Number(row[5]), }); } start_ms = Number(data[data.length - 1][0]) + 1; if (data.length < limit) break; } catch (error) { console.error(\"Error fetching binance data\", error); break; } } return rows; } }\n```\n\n### src\\smart-grid\\infrastructure\\market_data\\CompositeMarketDataProvider.ts\n```ts\nexport class CompositeMarketDataProvider implements IMarketDataProvider { constructor( private localProvider: LocalCsvMarketDataProvider, private apiProvider: BinanceMarketDataProvider, private fallbackProvider: SyntheticMarketDataProvider, ) {} async getHistoricalData( symbol: string, interval: string, limit: number = 1000, months: number = 6, ): Promise<Candle[]> { const cachedData = await this.localProvider.getHistoricalData( symbol, interval, limit, months, ); if (cachedData.length > 0) return cachedData; console.log(\" Fetching data from Binance API...\"); try { const data = await this.apiProvider.getHistoricalData( symbol, interval, limit, months, ); if (data && data.length > 0) { this.localProvider.saveData(data); return data; } } catch (exc) { console.log( ` Binance fetch failed: ${exc}. Falling back to synthetic data.`, ); } return await this.fallbackProvider.getHistoricalData( symbol, interval, limit, months, ); } }\n```\n\n### src\\smart-grid\\infrastructure\\market_data\\LocalCsvMarketDataProvider.ts\n```ts\nexport class LocalCsvMarketDataProvider implements IMarketDataProvider { constructor(private csvPath: string) {} async getHistoricalData( _symbol: string, _interval: string, _limit?: number, _months?: number, ): Promise<Candle[]> { if (!fs.existsSync(this.csvPath)) { return []; } console.log(` Loading cached data from ${this.csvPath}`); const csvContent = fs.readFileSync(this.csvPath, \"utf8\"); const parsed = Papa.parse(csvContent, { header: true, dynamicTyping: true, }); if (parsed.data && parsed.data.length > 0) { type RawCandle = { timestamp: string | number; open: string | number; high: string | number; low: string | number; close: string | number; volume: string | number; }; return (parsed.data as RawCandle[]) .filter((d) => d.timestamp) .map((d) => ({ timestamp: Number(d.timestamp), open: Number(d.open), high: Number(d.high), low: Number(d.low), close: Number(d.close), volume: Number(d.volume), })); } return []; } saveData(data: Candle[]): void { if (data.length > 0) { const csvData = Papa.unparse(data); fs.writeFileSync(this.csvPath, csvData, \"utf8\"); console.log(` Cached ${data.length} candles locally to ${this.csvPath}`); } } }\n```\n\n### src\\smart-grid\\infrastructure\\market_data\\SyntheticMarketDataProvider.ts\n```ts\nexport class SyntheticMarketDataProvider implements IMarketDataProvider { async getHistoricalData( symbol: string, interval: string, limit?: number, months?: number, ): Promise<Candle[]> { console.log(\" Generating synthetic BTC/USDT data for demonstration...\"); const hours = (months || 6) * 30 * 24; const dt = 1 / (365 * 24); const mu = 0.6; const sigma = 0.8; let price = 40_000.0; const rows: Candle[] = []; let current_ts = Date.now() - hours * 3600 * 1000; for (let i = 0; i < hours; i++) { const drift = (mu - 0.5 * sigma * sigma) * dt; let u = 0, v = 0; while (u === 0) u = Math.random(); while (v === 0) v = Math.random(); const std_norm = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v); price *= Math.exp(drift + sigma * Math.sqrt(dt) * std_norm); const noise = 0.995 + Math.random() * 0.01; const open = price * noise; const close = price; const high = Math.max(open, close) * (1.0 + Math.random() * 0.01); const low = Math.min(open, close) * (0.99 + Math.random() * 0.01); const volume = 100 + Math.random() * 1900; rows.push({ timestamp: current_ts, open, high, low, close, volume, }); current_ts += 3600 * 1000; } return rows; } }\n```\n\n### src\\smart-grid\\infrastructure\\reporting\\HtmlReportGenerator.ts\n```ts\nexport class HtmlReportGenerator implements IReportGenerator { generateReport(df: Candle[], bot: SmartGridBot, outputPath: string): void { const labels = df.map((c) => new Date(c.timestamp).toLocaleDateString()); const prices = df.map((c) => c.close); const equity = bot.equity_curve.slice(1); const html = `<!DOCTYPE html> <html> <head> <title>Smart Grid Backtest Results</title> <script src=\"https://cdn.jsdelivr.net/npm/chart.js\"></script> <style> body { background-color: #0d1117; color: white; font-family: sans-serif; } .chart-container { width: 90%; margin: auto; padding: 20px; } </style> </head> <body> <h2 style=\"text-align:center;\">BTC/USDT — Smart Grid Backtest</h2> <div class=\"chart-container\"> <canvas id=\"priceChart\"></canvas> </div> <div class=\"chart-container\"> <canvas id=\"equityChart\"></canvas> </div> <script> const labels = ${JSON.stringify(labels)}; const prices = ${JSON.stringify(prices)}; const equity = ${JSON.stringify(equity)}; new Chart(document.getElementById('priceChart'), { type: 'line', data: { labels: labels, datasets: [{ label: 'BTC/USDT Close', data: prices, borderColor: '#f0b429', borderWidth: 1, pointRadius: 0 }] }, options: { responsive: true, scales: { x: { display: false }, y: { ticks: { color: 'white' }, grid: { color: '#30363d' } } }, plugins: { legend: { labels: { color: 'white' } } } } }); new Chart(document.getElementById('equityChart'), { type: 'line', data: { labels: labels, datasets: [{ label: 'Portfolio Equity', data: equity, borderColor: '#3fb950', borderWidth: 1.2, pointRadius: 0 }] }, options: { responsive: true, scales: { x: { ticks: { color: 'white', maxTicksLimit: 10 }, grid: { color: '#30363d' } }, y: { ticks: { color: 'white' }, grid: { color: '#30363d' } } }, plugins: { legend: { labels: { color: 'white' } } } } }); </script> </body> </html>`; fs.writeFileSync(outputPath, html, \"utf8\"); console.log(` Chart saved → ${outputPath}`); } }\n```\n\n### src\\smart-grid\\presentation\\cli\\backtest_cli.ts\n```ts\ndotenv.config(); const asset = process.env.ASSET?.replace(/['\"]/g, \"\") || \"BTC/USDT\"; const symbol = asset.replace(\"/\", \"\"); const symbolClean = symbol.toLowerCase(); const CONFIG: GridStrategyConfig = { symbol: symbol, initial_balance: parseFloat(process.env.BALANCE || \"500.0\"), grid_density: parseInt(process.env.GRID_DENSITY || \"100\"), qty_per_order: parseFloat(process.env.QTY_PER_ORDER || \"0.0\"), volatility_lookback: parseInt(process.env.VOLATILITY_LOOKBACK || \"24\"), trend_period: parseInt(process.env.TREND_PERIOD || \"200\"), trend_threshold: parseFloat(process.env.TREND_THRESHOLD || \"0.002\"), take_profit_pct: parseFloat(process.env.TAKE_PROFIT || \"0.8\"), stop_loss_pct: parseFloat(process.env.STOP_LOSS || \"2.0\"), trailing_stop_pct: parseFloat(process.env.TRAILING_STOP || \"0.0\"), martingale_factor: parseFloat(process.env.MARTINGALE || \"3.0\"), max_exposure_pct: parseFloat(process.env.MAX_EXPOSURE || \"60.0\"), max_drawdown_exit_pct: parseFloat(process.env.MAX_DD_EXIT || \"10.0\"), }; const timeframe = process.env.TIME_FRAME?.replace(/['\"]/g, \"\") || \"1h\"; const LOCAL_CSV = `${symbolClean}_${timeframe}.csv`; const OUTPUT_CHART_HTML = \"smart_backtest_results.html\"; async function main() { console.log(`🚀 Running backtest for ${symbol} with config from .env...`); console.log(`📊 Capital: $${CONFIG.initial_balance}`); console.log(`📁 Source: ${LOCAL_CSV}`); const localProvider = new LocalCsvMarketDataProvider(LOCAL_CSV); const apiProvider = new BinanceMarketDataProvider(); const synthProvider = new SyntheticMarketDataProvider(); const marketDataProvider = new CompositeMarketDataProvider( localProvider, apiProvider, synthProvider, ); const reportGenerator = new HtmlReportGenerator(); const runBacktestUseCase = new RunBacktestUseCase( marketDataProvider, reportGenerator, ); await runBacktestUseCase.execute(CONFIG, OUTPUT_CHART_HTML, 6, timeframe); } if (require.main === module) { main().catch(console.error); }\n```\n\n### src\\smart-grid\\presentation\\cli\\run_bot.ts\n```ts\nasync function main(): Promise<void> { const config = loadConfig(); const logger = new ConsoleLogger(); const useCase = new SyncGridOrdersUseCase( new BinanceOrderExecutor(config.apiKey, config.apiSecret), new BinanceMarketDataAdapter(), logger, ); logger.info(`Starting grid sync for ${config.grid.symbol}...`); await useCase.execute({ config: config.grid, initialCapital: config.initialCapital, }); logger.info(\"Grid sync completed successfully.\"); } main().catch((err: unknown) => { console.error(\"[Fatal]\", err); process.exit(1); });\n```"
+            }
+          ]
+        }
+      ],
+      "generationConfig": {
+        "temperature": 0.1,
+        "responseMimeType": "application/json",
+        "responseSchema": {
+          "type": "OBJECT",
+          "properties": {
+            "reviewed_files": {
+              "type": "ARRAY",
+              "items": {
+                "type": "OBJECT",
+                "properties": {
+                  "path": {
+                    "type": "STRING"
+                  },
+                  "overall_assessment": {
+                    "type": "STRING"
+                  },
+                  "complexity_score": {
+                    "type": "NUMBER"
+                  },
+                  "issues": {
+                    "type": "ARRAY",
+                    "items": {
+                      "type": "OBJECT",
+                      "properties": {
+                        "severity": {
+                          "type": "STRING",
+                          "enum": [
+                            "HIGH",
+                            "MEDIUM",
+                            "LOW"
+                          ]
+                        },
+                        "type": {
+                          "type": "STRING",
+                          "enum": [
+                            "SECURITY",
+                            "RELIABILITY",
+                            "MAINTAINABILITY",
+                            "PERFORMANCE",
+                            "CONFIG"
+                          ]
+                        },
+                        "description": {
+                          "type": "STRING"
+                        },
+                        "evidence": {
+                          "type": "STRING"
+                        },
+                        "suggested_fix": {
+                          "type": "STRING"
+                        }
+                      },
+                      "required": [
+                        "severity",
+                        "type",
+                        "description",
+                        "evidence",
+                        "suggested_fix"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "path",
+                  "overall_assessment",
+                  "complexity_score",
+                  "issues"
+                ]
+              }
+            },
+            "repo_level_findings": {
+              "type": "ARRAY",
+              "items": {
+                "type": "OBJECT",
+                "properties": {
+                  "rank": {
+                    "type": "NUMBER"
+                  },
+                  "title": {
+                    "type": "STRING"
+                  },
+                  "detail": {
+                    "type": "STRING"
+                  },
+                  "recommended_action": {
+                    "type": "STRING"
+                  }
+                },
+                "required": [
+                  "rank",
+                  "title",
+                  "detail",
+                  "recommended_action"
+                ]
+              }
+            }
+          },
+          "required": [
+            "reviewed_files",
+            "repo_level_findings"
+          ]
+        }
+      }
+    }
+  },
+  "response": {
+    "reviewed_files": [
+      {
+        "path": "src/smart-grid/domain/bot/SmartGridBot.ts",
+        "overall_assessment": "This file represents the core logic of the backtesting bot, managing orders, positions, and strategy execution. It is highly complex and acts as a 'god object', violating the Single Responsibility Principle.",
+        "complexity_score": 95,
+        "issues": [
+          {
+            "severity": "HIGH",
+            "type": "RELIABILITY",
+            "description": "Financial calculations rely on standard JavaScript numbers, which are prone to floating-point inaccuracies. This is a critical risk for a trading application where precision is paramount.",
+            "evidence": "balance, profit, roi, position calculations use 'number' type.",
+            "suggested_fix": "Implement a dedicated decimal arithmetic library (e.g., 'decimal.js') for all financial calculations to ensure precision."
+          },
+          {
+            "severity": "MEDIUM",
+            "type": "MAINTAINABILITY",
+            "description": "The `SmartGridBot` class is a 'god object' responsible for too many concerns (indicators, orders, positions, risk management, grid logic). This leads to high coupling and makes testing, understanding, and extending the bot very difficult.",
+            "evidence": "on_candle method orchestrates many distinct operations.",
+            "suggested_fix": "Refactor into smaller, more focused services or modules (e.g., PositionManager, OrderManager, RiskManager, GridBuilder) that the bot orchestrates."
+          },
+          {
+            "severity": "MEDIUM",
+            "type": "MAINTAINABILITY",
+            "description": "The `on_candle` method and several private methods have very high cyclomatic complexity due to numerous conditional statements and nested logic, making them hard to test and prone to bugs.",
+            "evidence": "Extensive if/else blocks and loops in on_candle, _place_buy_orders, _manage_positions.",
+            "suggested_fix": "Break down complex methods into smaller, single-responsibility functions. Extract decision-making logic into strategy objects or rule engines."
+          },
+          {
+            "severity": "MEDIUM",
+            "type": "MAINTAINABILITY",
+            "description": "Numerous magic numbers are hardcoded throughout the class for thresholds, multipliers, and limits, making the code difficult to read, understand, and tune without modifying the source.",
+            "evidence": "0.99, 0.000001, 15, 0.005, 5.2, 0.6, 6.0, 4.0, 0.15, 0.3, 0.8, 0.2, 5_000, 10_000, 0.8, 0.5, 35, 55, 25, 40, 25, 1.008.",
+            "suggested_fix": "Define all magic numbers as named constants within the class or as configurable parameters in the `GridStrategyConfig`."
+          },
+          {
+            "severity": "LOW",
+            "type": "RELIABILITY",
+            "description": "The `summary()` method's ROI calculation can result in division by zero if `initial_balance` is 0, leading to `Infinity` or `NaN`.",
+            "evidence": "const roi = (profit / this.initial_balance) * 100;",
+            "suggested_fix": "Add a check for `this.initial_balance === 0` and handle it gracefully (e.g., return 0 or throw an error)."
+          },
+          {
+            "severity": "LOW",
+            "type": "PERFORMANCE",
+            "description": "Repeated slicing of `closes_history` and `volumes_history` (e.g., `slice(-210)`) can be inefficient for very long backtests, as it creates new arrays on each candle.",
+            "evidence": "closes_history.slice(-210), volumes.slice(-50)",
+            "suggested_fix": "Consider using a fixed-size circular buffer or a more efficient data structure for historical data windows to avoid repeated array allocations."
+          }
+        ]
+      },
+      {
+        "path": "src/smart-grid/infrastructure/exchange/BinanceOrderExecutor.ts",
+        "overall_assessment": "This file provides an implementation for executing orders on Binance, including time synchronization and symbol filter handling. It is a near-duplicate of `BinanceOrderExecutionService.ts`.",
+        "complexity_score": 40,
+        "issues": [
+          {
+            "severity": "HIGH",
+            "type": "MAINTAINABILITY",
+            "description": "This file is almost identical to `src/smart-grid/infrastructure/execution/BinanceOrderExecutionService.ts`. This significant code duplication is a major structural problem, leading to increased maintenance effort and potential for inconsistent behavior.",
+            "evidence": "Near-identical code structure, methods, and logic as BinanceOrderExecutionService.ts.",
+            "suggested_fix": "Consolidate these two files into a single, robust `BinanceOrderService` that can be used by both the live bot and any other components requiring Binance order execution."
+          },
+          {
+            "severity": "MEDIUM",
+            "type": "RELIABILITY",
+            "description": "The `ensureTimeSync` method silently swallows errors during time synchronization. If time sync fails, subsequent signed API requests will likely fail due to timestamp discrepancies, but the bot will not be aware of the root cause.",
+            "evidence": "try { ... } catch { } in ensureTimeSync.",
+            "suggested_fix": "Log the error in `ensureTimeSync` and consider throwing a specific error or returning a status to indicate time synchronization failure, rather than silently failing."
+          },
+          {
+            "severity": "LOW",
+            "type": "MAINTAINABILITY",
+            "description": "The `exchangeInfo` is cached but lacks a mechanism to refresh it. Exchange filters (tickSize, stepSize) can occasionally change, potentially leading to order placement failures if the cached info is stale.",
+            "evidence": "if (!this.exchangeInfo) { this.exchangeInfo = await this.client.exchangeInfo(); }",
+            "suggested_fix": "Implement a periodic refresh mechanism for `exchangeInfo` or a way to invalidate the cache if an order fails due to filter mismatch."
+          },
+          {
+            "severity": "LOW",
+            "type": "MAINTAINABILITY",
+            "description": "Uses type assertions like `orders as any[]` and `side as unknown as OrderSide` which bypass TypeScript's type safety. While sometimes necessary for external libraries, they should be minimized and justified.",
+            "evidence": "orders as any[], side as unknown as OrderSide",
+            "suggested_fix": "Define proper interfaces for Binance API responses or use type guards to safely handle external data, reducing the need for `any` and `unknown` assertions."
+          }
+        ]
+      },
+      {
+        "path": "src/smart-grid/infrastructure/execution/BinanceOrderExecutionService.ts",
+        "overall_assessment": "This file provides an implementation for executing orders on Binance, including time synchronization and symbol filter handling. It is a near-duplicate of `BinanceOrderExecutor.ts`.",
+        "complexity_score": 45,
+        "issues": [
+          {
+            "severity": "HIGH",
+            "type": "MAINTAINABILITY",
+            "description": "This file is almost identical to `src/smart-grid/infrastructure/exchange/BinanceOrderExecutor.ts`. This significant code duplication is a major structural problem, leading to increased maintenance effort and potential for inconsistent behavior.",
+            "evidence": "Near-identical code structure, methods, and logic as BinanceOrderExecutor.ts.",
+            "suggested_fix": "Consolidate these two files into a single, robust `BinanceOrderService` that can be used by both the live bot and any other components requiring Binance order execution."
+          },
+          {
+            "severity": "MEDIUM",
+            "type": "RELIABILITY",
+            "description": "The `getOpenOrders` method catches errors and returns an empty array. This can mask critical API failures, making the bot believe there are no open orders when the API call itself failed.",
+            "evidence": "catch (error: unknown) { console.error(...); return []; }",
+            "suggested_fix": "Instead of returning an empty array, re-throw the error or return a `Result` type (e.g., `Either<Error, ExchangeOrder[]>`) to explicitly indicate failure."
+          },
+          {
+            "severity": "MEDIUM",
+            "type": "MAINTAINABILITY",
+            "description": "Extensive use of `console.log`, `console.error`, and `console.warn` directly within the service instead of using an injected logger. This makes it difficult to control, filter, or integrate logging with external systems.",
+            "evidence": "console.log(`[Binance] Time synchronized...`), console.error(`Failed to execute order:`), etc.",
+            "suggested_fix": "Inject an `ILoggerPort` (similar to `SyncGridOrdersUseCase`) and use it consistently for all logging within this service."
+          },
+          {
+            "severity": "LOW",
+            "type": "MAINTAINABILITY",
+            "description": "Uses type assertions like `side as unknown as OrderSide` which bypass TypeScript's type safety. While sometimes necessary for external libraries, they should be minimized and justified.",
+            "evidence": "side as unknown as OrderSide",
+            "suggested_fix": "Define proper interfaces for Binance API responses or use type guards to safely handle external data, reducing the need for `any` and `unknown` assertions."
+          }
+        ]
+      },
+      {
+        "path": "src/smart-grid/application/usecase/SyncGridOrdersUseCase.ts",
+        "overall_assessment": "This use case orchestrates the synchronization of grid orders with the exchange. It is a central piece of the live trading bot logic, but its complexity and length suggest a violation of the Single Responsibility Principle.",
+        "complexity_score": 60,
+        "issues": [
+          {
+            "severity": "MEDIUM",
+            "type": "MAINTAINABILITY",
+            "description": "The `execute` method is very long and orchestrates multiple distinct operations (data fetching, capital computation, logging, syncing buy/sell orders). This violates SRP and makes the method hard to read, test, and maintain.",
+            "evidence": "execute method length and scope.",
+            "suggested_fix": "Break down the `execute` method into smaller, more focused private methods or extract parts into dedicated domain services (e.g., `GridOrderSynchronizer`, `BalanceCalculator`)."
+          },
+          {
+            "severity": "MEDIUM",
+            "type": "RELIABILITY",
+            "description": "Numerous magic numbers are hardcoded (e.g., `PRICE_TOLERANCE`, `MIN_ORDER_NOTIONAL`, `0.99`, `0.000001`, `15`). These values are critical to the bot's behavior but are not clearly named or configurable.",
+            "evidence": "const PRICE_TOLERANCE = 0.002; const MIN_ORDER_NOTIONAL = 5.5; if (unhedgedQty <= 0.000001)",
+            "suggested_fix": "Define these values as named constants at the top of the file or, preferably, make them configurable parameters passed via `GridConfig`."
+          },
+          {
+            "severity": "LOW",
+            "type": "RELIABILITY",
+            "description": "The `openOrders` and `balances` are fetched once at the beginning of `execute`. In a live trading environment, these could become stale if market conditions or external actions change during the execution of `syncSellOrders` or `syncBuyOrders`.",
+            "evidence": "const [candles, balances, openOrders] = await Promise.all([...]);",
+            "suggested_fix": "Consider re-fetching critical state (like open orders or balances) immediately before making decisions that depend on them, or implement a more robust state management/event-driven approach."
+          },
+          {
+            "severity": "LOW",
+            "type": "RELIABILITY",
+            "description": "Calculations involving `toFixed(2)` are primarily for display. The underlying floating-point arithmetic can still introduce precision errors in financial calculations before rounding, which can be problematic for order quantities and prices.",
+            "evidence": "toFixed(2) used for display, but calculations like `currentPrice * (1 + takeProfitPct / 100)` are not explicitly rounded for precision.",
+            "suggested_fix": "Adopt a consistent rounding strategy for all financial calculations, potentially using a dedicated decimal library or a utility function like `round2` from `GridCalculator`."
+          }
+        ]
+      },
+      {
+        "path": "src/smart-grid/infrastructure/config/EnvConfigLoader.ts",
+        "overall_assessment": "This file is responsible for loading application configuration from environment variables. It includes logic for suppressing dotenv logs and deprecation warnings.",
+        "complexity_score": 15,
+        "issues": [
+          {
+            "severity": "MEDIUM",
+            "type": "SECURITY",
+            "description": "The `apiKey` and `apiSecret` are loaded directly from environment variables. While better than hardcoding, it's crucial that these are managed securely in production (e.g., via a secrets management service) and never committed to version control.",
+            "evidence": "apiKey: requireEnv('API_KEY'), apiSecret: requireEnv('SECRET_KEY')",
+            "suggested_fix": "Ensure robust secrets management practices are in place for production deployments. Document best practices for handling these credentials."
+          },
+          {
+            "severity": "MEDIUM",
+            "type": "RELIABILITY",
+            "description": "The `loadEnvSilently` function suppresses all `console.log` and `console.info` messages during `dotenv.config()`. This can hide important warnings or errors from `dotenv` itself, making debugging difficult.",
+            "evidence": "console.log = noop; console.info = noop; dotenv.config(...); console.log = origLog;",
+            "suggested_fix": "Remove the silent loading or configure `dotenv` to be less verbose if needed, rather than globally suppressing console output. Important warnings should not be hidden."
+          },
+          {
+            "severity": "MEDIUM",
+            "type": "RELIABILITY",
+            "description": "Globally suppressing `DeprecationWarning`s can hide critical information about deprecated APIs that might break in future Node.js or library versions. This should be done very selectively, if at all.",
+            "evidence": "process.emitWarning = function (warning, ...args) { if (args[0] === 'DeprecationWarning') return; ... }",
+            "suggested_fix": "Remove the global suppression of `DeprecationWarning`. Address specific deprecation warnings as they arise, or use more targeted suppression if absolutely necessary."
+          },
+          {
+            "severity": "LOW",
+            "type": "RELIABILITY",
+            "description": "The `optionalFloat` and `optionalInt` functions use `parseFloat` and `parseInt` without explicit validation that the environment variable string is a valid number. If a non-numeric string is provided, it will result in `NaN`.",
+            "evidence": "parseFloat(process.env[key] ?? String(fallback))",
+            "suggested_fix": "Add explicit validation (e.g., `isNaN`) after parsing to ensure the value is a valid number, falling back to the default or throwing an error if invalid."
+          }
+        ]
+      },
+      {
+        "path": "src/smart-grid/infrastructure/market_data/BinanceMarketDataProvider.ts",
+        "overall_assessment": "This file is responsible for fetching historical market data from the Binance API, handling pagination to retrieve data over a specified period.",
+        "complexity_score": 25,
+        "issues": [
+          {
+            "severity": "MEDIUM",
+            "type": "RELIABILITY",
+            "description": "Errors during API calls are caught and logged to `console.error`, but the loop then `break`s. This means partial data might be returned without a clear indication to the caller that the full historical range could not be fetched.",
+            "evidence": "catch (error) { console.error(...); break; }",
+            "suggested_fix": "Re-throw the error after logging, or return a `Result` type that indicates whether the data retrieval was complete or partial due to an error."
+          },
+          {
+            "severity": "LOW",
+            "type": "MAINTAINABILITY",
+            "description": "Uses `console.error` directly instead of an injected logger, making it harder to manage and integrate logging.",
+            "evidence": "console.error('Error fetching binance data', error);",
+            "suggested_fix": "Inject an `ILoggerPort` and use it for all logging within this provider."
+          },
+          {
+            "severity": "LOW",
+            "type": "MAINTAINABILITY",
+            "description": "The `row: any[]` type for Binance API response rows bypasses type safety. While the values are converted to `Number`, a more specific type would improve code clarity and prevent potential runtime issues if the API response format changes.",
+            "evidence": "for (const row of data) { rows.push({ timestamp: Number(row[0]), ... }); }",
+            "suggested_fix": "Define an interface for the Binance Kline array structure (e.g., `BinanceKlineRow`) to improve type safety and readability."
+          }
+        ]
+      },
+      {
+        "path": "src/smart-grid/infrastructure/market_data/LocalCsvMarketDataProvider.ts",
+        "overall_assessment": "This file provides market data from local CSV files, acting as a caching layer. It uses synchronous file system operations.",
+        "complexity_score": 20,
+        "issues": [
+          {
+            "severity": "MEDIUM",
+            "type": "RELIABILITY",
+            "description": "Uses synchronous file system operations (`fs.readFileSync`, `fs.writeFileSync`). While acceptable for CLI tools, in a long-running process or a web server, synchronous I/O can block the Node.js event loop, impacting performance and responsiveness.",
+            "evidence": "fs.readFileSync(this.csvPath, 'utf8'); fs.writeFileSync(this.csvPath, csvData, 'utf8');",
+            "suggested_fix": "Refactor to use asynchronous file system operations (`fs.promises.readFile`, `fs.promises.writeFile`) to avoid blocking the event loop."
+          },
+          {
+            "severity": "LOW",
+            "type": "RELIABILITY",
+            "description": "`fs.readFileSync` and `Papa.parse` can throw errors (e.g., file not found, malformed CSV) that are not explicitly caught. This could lead to unhandled exceptions.",
+            "evidence": "const csvContent = fs.readFileSync(...); const parsed = Papa.parse(...);",
+            "suggested_fix": "Wrap `fs.readFileSync` and `Papa.parse` calls in a `try/catch` block to handle potential file system or parsing errors gracefully."
+          },
+          {
+            "severity": "LOW",
+            "type": "MAINTAINABILITY",
+            "description": "Uses `console.log` directly instead of an injected logger, making it harder to manage and integrate logging.",
+            "evidence": "console.log(` Loading cached data from ${this.csvPath}`);",
+            "suggested_fix": "Inject an `ILoggerPort` and use it for all logging within this provider."
+          }
+        ]
+      },
+      {
+        "path": "src/smart-grid/infrastructure/market_data/CompositeMarketDataProvider.ts",
+        "overall_assessment": "This file implements a composite pattern for market data providers, allowing for local caching, API fetching, and synthetic data fallback.",
+        "complexity_score": 15,
+        "issues": [
+          {
+            "severity": "LOW",
+            "type": "MAINTAINABILITY",
+            "description": "The constructor directly instantiates its dependencies (`LocalCsvMarketDataProvider`, `BinanceMarketDataProvider`, `SyntheticMarketDataProvider`). This violates the Dependency Inversion Principle, making it harder to test with mocks or swap implementations.",
+            "evidence": "constructor(private localProvider: LocalCsvMarketDataProvider, private apiProvider: BinanceMarketDataProvider, private fallbackProvider: SyntheticMarketDataProvider)",
+            "suggested_fix": "Inject interfaces for the providers (e.g., `ILocalMarketDataProvider`, `IApiMarketDataProvider`) rather than concrete implementations. This would require the composition root to handle instantiation."
+          },
+          {
+            "severity": "LOW",
+            "type": "MAINTAINABILITY",
+            "description": "Uses `console.log` directly instead of an injected logger, making it harder to manage and integrate logging.",
+            "evidence": "console.log(' Fetching data from Binance API...');",
+            "suggested_fix": "Inject an `ILoggerPort` and use it for all logging within this provider."
+          },
+          {
+            "severity": "LOW",
+            "type": "RELIABILITY",
+            "description": "When `apiProvider.getHistoricalData` fails, the `exc` is logged as a string, potentially losing valuable error type and stack trace information.",
+            "evidence": "console.log(` Binance fetch failed: ${exc}. Falling back to synthetic data.`, );",
+            "suggested_fix": "Log the `exc` object directly (e.g., `console.error('Binance fetch failed:', exc)`) to preserve its full details, or use an injected logger's error method."
+          }
+        ]
+      },
+      {
+        "path": "src/smart-grid/presentation/cli/backtest_cli.ts",
+        "overall_assessment": "This file serves as the CLI entry point for running backtests. It configures and orchestrates the various components required for a backtest.",
+        "complexity_score": 10,
+        "issues": [
+          {
+            "severity": "LOW",
+            "type": "MAINTAINABILITY",
+            "description": "The `dotenv.config()` call is present here and also in `EnvConfigLoader.ts`. It should ideally be called only once at the very application entry point to avoid redundant loading or potential conflicts.",
+            "evidence": "dotenv.config();",
+            "suggested_fix": "Remove `dotenv.config()` from this file and ensure it's handled exclusively by `EnvConfigLoader.ts` or a dedicated application bootstrap file."
+          },
+          {
+            "severity": "LOW",
+            "type": "MAINTAINABILITY",
+            "description": "Directly instantiates various providers (`LocalCsvMarketDataProvider`, `BinanceMarketDataProvider`, `SyntheticMarketDataProvider`, `HtmlReportGenerator`). This makes the setup less flexible and harder to test with different implementations.",
+            "evidence": "const localProvider = new LocalCsvMarketDataProvider(LOCAL_CSV);",
+            "suggested_fix": "Consider using a simple dependency injection container or a factory pattern to manage the creation and injection of these dependencies."
+          },
+          {
+            "severity": "LOW",
+            "type": "RELIABILITY",
+            "description": "Environment variable parsing (e.g., `parseFloat(process.env.BALANCE || '500.0')`) does not explicitly validate if the parsed value is a valid number. If an invalid string is provided, `parseFloat` will return `NaN`, which could lead to runtime errors.",
+            "evidence": "parseFloat(process.env.BALANCE || '500.0')",
+            "suggested_fix": "Add explicit validation (e.g., `isNaN`) after parsing environment variables to ensure they are valid numbers, providing a fallback or throwing an error if invalid."
+          },
+          {
+            "severity": "LOW",
+            "type": "MAINTAINABILITY",
+            "description": "Uses `console.log` directly instead of an injected logger, making it harder to manage and integrate logging.",
+            "evidence": "console.log(`🚀 Running backtest for ${symbol} with config from .env...`);",
+            "suggested_fix": "Inject an `ILoggerPort` and use it for all logging within this CLI script."
+          }
+        ]
+      },
+      {
+        "path": "src/shared/indicators/IndicatorService.ts",
+        "overall_assessment": "This utility class provides static methods for computing various technical indicators. The methods are generally well-defined but have some edge case handling that could be improved.",
+        "complexity_score": 25,
+        "issues": [
+          {
+            "severity": "LOW",
+            "type": "RELIABILITY",
+            "description": "Methods like `computeATR`, `computeVolatility`, and `computeRSI` return `0` or `0.01` or `50` (magic numbers) when insufficient data is provided or specific conditions are met (e.g., `losses === 0`). This can mask underlying data issues or lead to misleading indicator values.",
+            "evidence": "if (changes.length < period) return 0; return log_ret.length > 0 ? ... : 0.01; if (losses === 0) return 100;",
+            "suggested_fix": "Consider returning `NaN` or throwing an error when data is insufficient or conditions are undefined, to clearly signal an invalid state rather than returning a default value."
+          },
+          {
+            "severity": "LOW",
+            "type": "RELIABILITY",
+            "description": "In `computeVolatility` and `computeTrend`, division by zero is prevented by replacing a zero denominator with `1`. This prevents a crash but introduces an artificial value that might distort the calculation.",
+            "evidence": "const prev = lookback[i - 1] === 0 ? 1 : lookback[i - 1]; const prev = ma_prev === 0 ? 1 : ma_prev;",
+            "suggested_fix": "Evaluate if replacing with `1` is the desired behavior. Alternatively, handle these edge cases by returning `NaN` or a specific error, or by ensuring input data is always non-zero where division occurs."
+          }
+        ]
+      },
+      {
+        "path": "src/smart-grid/application/usecases/RunBacktestUseCase.ts",
+        "overall_assessment": "This use case orchestrates the backtesting process, fetching data, running the bot simulation, and generating reports. It effectively uses injected dependencies.",
+        "complexity_score": 20,
+        "issues": [
+          {
+            "severity": "LOW",
+            "type": "MAINTAINABILITY",
+            "description": "Uses `console.log` directly for output instead of an injected logger. This makes it harder to control logging levels, format, or integrate with structured logging systems.",
+            "evidence": "console.log('='.repeat(60)); console.log(' Smart Grid Trading Bot — Backtester (TS)');",
+            "suggested_fix": "Inject an `ILoggerPort` (similar to `SyncGridOrdersUseCase`) and use it consistently for all output and logging."
+          },
+          {
+            "severity": "LOW",
+            "type": "MAINTAINABILITY",
+            "description": "Magic numbers like `1000` (limit), `6` (months), `210` (window size), `50` (volume slice) are hardcoded, making the backtest configuration less flexible and harder to understand at a glance.",
+            "evidence": "this.marketDataProvider.getHistoricalData(symbol, timeframe, 1000, months); const window = closes.slice(-210);",
+            "suggested_fix": "Define these values as named constants or pass them as parameters in the `GridStrategyConfig`."
+          }
+        ]
+      },
+      {
+        "path": "src/smart-grid/infrastructure/reporting/HtmlReportGenerator.ts",
+        "overall_assessment": "This file generates an HTML report with embedded Chart.js graphs to visualize backtest results. It uses string templating for HTML generation.",
+        "complexity_score": 10,
+        "issues": [
+          {
+            "severity": "LOW",
+            "type": "SECURITY",
+            "description": "Data (`labels`, `prices`, `equity`) is directly embedded into the HTML using `JSON.stringify()`. While currently from trusted sources, if any of this data could originate from untrusted input, it would pose an XSS vulnerability.",
+            "evidence": "const labels = ${JSON.stringify(labels)};",
+            "suggested_fix": "For reports that might include untrusted data, ensure proper HTML escaping or use a templating engine with auto-escaping features. In this specific context, document the assumption of trusted data."
+          },
+          {
+            "severity": "LOW",
+            "type": "MAINTAINABILITY",
+            "description": "The HTML report is generated using a large multi-line string template. For more complex reports, this approach can become difficult to manage, read, and extend.",
+            "evidence": "const html = `<!DOCTYPE html> <html> ... </html>`;",
+            "suggested_fix": "Consider using a dedicated templating engine (e.g., Handlebars, EJS) for generating HTML reports, which offers better structure, reusability, and maintainability."
+          },
+          {
+            "severity": "LOW",
+            "type": "MAINTAINABILITY",
+            "description": "Uses `console.log` directly instead of an injected logger, making it harder to manage and integrate logging.",
+            "evidence": "console.log(` Chart saved → ${outputPath}`);",
+            "suggested_fix": "Inject an `ILoggerPort` and use it for all logging within this generator."
+          },
+          {
+            "severity": "LOW",
+            "type": "RELIABILITY",
+            "description": "Uses `fs.writeFileSync`, a synchronous file system operation. While acceptable for CLI tools, it can block the event loop in other contexts.",
+            "evidence": "fs.writeFileSync(outputPath, html, 'utf8');",
+            "suggested_fix": "Refactor to use `fs.promises.writeFile` for asynchronous file writing."
+          }
+        ]
+      },
+      {
+        "path": "src/smart-grid/presentation/cli/run_bot.ts",
+        "overall_assessment": "This file serves as the CLI entry point for running the live trading bot. It loads configuration and initializes the core use case.",
+        "complexity_score": 5,
+        "issues": [
+          {
+            "severity": "LOW",
+            "type": "MAINTAINABILITY",
+            "description": "Directly instantiates `BinanceOrderExecutor`, `BinanceMarketDataAdapter`, and `ConsoleLogger`. This tight coupling makes it harder to test with mocks or swap implementations without modifying the entry point.",
+            "evidence": "new BinanceOrderExecutor(...), new BinanceMarketDataAdapter(), new ConsoleLogger()",
+            "suggested_fix": "Consider using a simple dependency injection container or a factory pattern to manage the creation and injection of these dependencies."
+          }
+        ]
+      },
+      {
+        "path": "src/shared/utils/MathUtils.ts",
+        "overall_assessment": "This utility class provides basic mathematical functions. It is simple and focused.",
+        "complexity_score": 5,
+        "issues": [
+          {
+            "severity": "LOW",
+            "type": "RELIABILITY",
+            "description": "The `stdDev` method returns `0` if the input array is empty. Mathematically, the standard deviation of an empty set is undefined, and returning `0` can be misleading.",
+            "evidence": "if (n === 0) return 0;",
+            "suggested_fix": "Consider returning `NaN` or throwing an error when the input array is empty to clearly indicate an undefined result."
+          }
+        ]
+      },
+      {
+        "path": "src/smart-grid/domain/service/CapitalCalculator.ts",
+        "overall_assessment": "This file provides a pure function for calculating capital, ROI, and PnL. It is clear and focused.",
+        "complexity_score": 3,
+        "issues": [
+          {
+            "severity": "LOW",
+            "type": "RELIABILITY",
+            "description": "The `roiPct` calculation can result in division by zero if `initialCapital` is `0`, leading to `Infinity` or `NaN`.",
+            "evidence": "const roiPct = (pnlQuote / initialCapital) * 100;",
+            "suggested_fix": "Add a check for `initialCapital === 0` and handle it gracefully (e.g., return 0 or throw an error)."
+          },
+          {
+            "severity": "LOW",
+            "type": "RELIABILITY",
+            "description": "The `effectiveCapital` calculation defaults to `initialCapital` if `realCapital` is not positive. This might not be the desired behavior if the bot has incurred significant losses, potentially masking the true negative capital.",
+            "evidence": "const effectiveCapital = realCapital > 0 ? realCapital : initialCapital;",
+            "suggested_fix": "Review the business logic for `effectiveCapital` when `realCapital` is zero or negative. It might be more accurate to return `realCapital` directly or handle negative capital explicitly."
+          }
+        ]
+      },
+      {
+        "path": "src/smart-grid/domain/service/GridCalculator.ts",
+        "overall_assessment": "This file provides a pure function for calculating grid levels for buy orders. It is clear and focused.",
+        "complexity_score": 3,
+        "issues": [
+          {
+            "severity": "LOW",
+            "type": "RELIABILITY",
+            "description": "The `quantity` calculation `perOrderBudget / price` could lead to division by zero if `price` is `0`.",
+            "evidence": "const quantity = round2(perOrderBudget / price);",
+            "suggested_fix": "Add a check for `price === 0` and handle it gracefully (e.g., return 0 quantity or throw an error)."
+          }
+        ]
+      },
+      {
+        "path": "src/smart-grid/infrastructure/exchange/BinanceMarketDataAdapter.ts",
+        "overall_assessment": "This file adapts the Binance API for market data retrieval. It is simple and focused.",
+        "complexity_score": 5,
+        "issues": [
+          {
+            "severity": "LOW",
+            "type": "RELIABILITY",
+            "description": "The `catch` block re-throws a new `Error` with a string message, losing the original error's type and stack trace. This makes debugging harder.",
+            "evidence": "throw new Error(`[BinanceMarketDataAdapter] Failed to fetch klines: ${String(error)}`);",
+            "suggested_fix": "Re-throw the original error or wrap it in a custom error type that preserves the original error's details (e.g., `new CustomError('Failed to fetch klines', { cause: error })`)."
+          },
+          {
+            "severity": "LOW",
+            "type": "MAINTAINABILITY",
+            "description": "The `row: any[]` type for Binance API response rows bypasses type safety. While the values are converted to `Number`, a more specific type would improve code clarity and prevent potential runtime issues if the API response format changes.",
+            "evidence": "response.data.map((row: any[]): Candle => ({ timestamp: Number(row[0]), ... }));",
+            "suggested_fix": "Define an interface for the Binance Kline array structure (e.g., `BinanceKlineRow`) to improve type safety and readability."
+          }
+        ]
+      },
+      {
+        "path": "src/smart-grid/infrastructure/logger/ConsoleLogger.ts",
+        "overall_assessment": "This file provides a basic console logger implementation. It is functional but lacks advanced features.",
+        "complexity_score": 2,
+        "issues": [
+          {
+            "severity": "LOW",
+            "type": "MAINTAINABILITY",
+            "description": "The `error` method logs `error ?? ''` if the error object is `undefined` or `null`. This might obscure valuable debugging information if a proper error object is not passed.",
+            "evidence": "console.error(`[${this.timestamp()}] ERROR ${message}`, error ?? '');",
+            "suggested_fix": "Ensure that actual error objects are passed to the `error` method. Consider stringifying the error object (e.g., `error.stack` or `JSON.stringify(error)`) if it's not a simple string, to capture full details."
+          },
+          {
+            "severity": "LOW",
+            "type": "MAINTAINABILITY",
+            "description": "The logger is very basic, lacking features like configurable log levels, structured logging, or integration with external logging services, which are common in production applications.",
+            "evidence": "Only info, warn, error methods with fixed console output.",
+            "suggested_fix": "For a production-grade application, consider integrating a more robust logging library (e.g., Winston, Pino) that supports configurable levels, transports, and structured logging."
+          }
+        ]
+      },
+      {
+        "path": "src/smart-grid/infrastructure/market_data/SyntheticMarketDataProvider.ts",
+        "overall_assessment": "This file generates synthetic market data using a geometric Brownian motion model. It is useful for testing and demonstration purposes.",
+        "complexity_score": 15,
+        "issues": [
+          {
+            "severity": "LOW",
+            "type": "MAINTAINABILITY",
+            "description": "Numerous magic numbers are hardcoded for simulation parameters (e.g., `6` for months, `0.6` for `mu`, `0.8` for `sigma`, `40_000.0` for initial price, noise factors). This makes the simulation less flexible and harder to tune.",
+            "evidence": "const hours = (months || 6) * 30 * 24; const mu = 0.6; const sigma = 0.8; let price = 40_000.0;",
+            "suggested_fix": "Define these values as named constants or make them configurable parameters that can be passed to the provider's constructor or `getHistoricalData` method."
+          },
+          {
+            "severity": "LOW",
+            "type": "MAINTAINABILITY",
+            "description": "Uses `console.log` directly instead of an injected logger, making it harder to manage and integrate logging.",
+            "evidence": "console.log(' Generating synthetic BTC/USDT data for demonstration...');",
+            "suggested_fix": "Inject an `ILoggerPort` and use it for all logging within this provider."
+          },
+          {
+            "severity": "LOW",
+            "type": "RELIABILITY",
+            "description": "Uses `Math.random()` for generating random numbers. For simulations where reproducibility is important (e.g., comparing strategy changes), a seeded pseudo-random number generator would be preferable.",
+            "evidence": "Math.random() used for noise and volume generation.",
+            "suggested_fix": "Consider using a seeded PRNG library if reproducible simulations are a requirement for testing and development."
+          }
+        ]
+      }
+    ],
+    "repo_level_findings": [
+      {
+        "rank": 1,
+        "title": "Critical Code Duplication in Binance Order Execution",
+        "detail": "The files `src/smart-grid/infrastructure/exchange/BinanceOrderExecutor.ts` and `src/smart-grid/infrastructure/execution/BinanceOrderExecutionService.ts` are almost identical. This duplication is a severe structural problem, leading to redundant maintenance efforts, potential for inconsistent behavior, and increased bug surface area.",
+        "recommended_action": "Consolidate these two files into a single, well-designed `BinanceOrderService` that encapsulates all Binance order execution logic. This service should be flexible enough to serve both live trading and backtesting/simulation needs."
+      },
+      {
+        "rank": 2,
+        "title": "Lack of Floating Point Precision for Financial Calculations",
+        "detail": "Throughout the codebase, especially in `src/smart-grid/domain/bot/SmartGridBot.ts` and `src/smart-grid/application/usecase/SyncGridOrdersUseCase.ts`, financial calculations (prices, quantities, balances, PnL) rely on standard JavaScript `number` types. These are inherently prone to floating-point inaccuracies, which can lead to significant errors in a trading application.",
+        "recommended_action": "Implement a dedicated decimal arithmetic library (e.g., 'decimal.js' or 'big.js') for all financial calculations to ensure exact precision. This is a fundamental requirement for reliable financial software."
+      },
+      {
+        "rank": 3,
+        "title": "God Object and SRP Violation in `SmartGridBot.ts`",
+        "detail": "The `SmartGridBot` class (`src/smart-grid/domain/bot/SmartGridBot.ts`) is overly complex and responsible for too many distinct concerns, including indicator calculation, order management, position tracking, risk management, and grid logic. This 'god object' pattern makes the code difficult to understand, test, maintain, and extend.",
+        "recommended_action": "Refactor `SmartGridBot.ts` by extracting distinct responsibilities into smaller, focused domain services or modules (e.g., `PositionManager`, `OrderManager`, `RiskManager`, `GridBuilder`). The `SmartGridBot` should then orchestrate these services rather than implementing all logic itself."
+      },
+      {
+        "rank": 4,
+        "title": "Inconsistent and Direct Console Logging",
+        "detail": "Many files (e.g., `RunBacktestUseCase.ts`, `BinanceOrderExecutionService.ts`, `CompositeMarketDataProvider.ts`, `backtest_cli.ts`, `HtmlReportGenerator.ts`, `BinanceMarketDataProvider.ts`, `LocalCsvMarketDataProvider.ts`, `SyntheticMarketDataProvider.ts`) use `console.log`/`console.error`/`console.warn` directly. This is inconsistent with `SyncGridOrdersUseCase.ts` which correctly uses an injected `ILoggerPort`. This makes centralized log management, filtering, and integration with external logging systems challenging.",
+        "recommended_action": "Inject `ILoggerPort` into all components that perform logging. Implement a robust logging solution (e.g., Winston, Pino) for production, allowing for configurable log levels, structured logging, and different output transports."
+      },
+      {
+        "rank": 5,
+        "title": "Excessive Use of Magic Numbers",
+        "detail": "Numerous critical numerical constants are hardcoded throughout the codebase, particularly in `src/smart-grid/domain/bot/SmartGridBot.ts` and `src/smart-grid/application/usecase/SyncGridOrdersUseCase.ts`. These 'magic numbers' reduce code readability, make it difficult to understand the logic, and complicate tuning or modification of strategy parameters.",
+        "recommended_action": "Replace all magic numbers with named constants, either within the scope of their use or, preferably, as configurable parameters passed via configuration objects (e.g., `GridStrategyConfig`). This improves clarity, maintainability, and flexibility."
+      },
+      {
+        "rank": 6,
+        "title": "Inconsistent and Suboptimal Error Handling",
+        "detail": "Error handling varies significantly across files. Some `catch` blocks silently swallow errors (`BinanceOrderExecutor.ts:ensureTimeSync`), others log and return empty arrays (`BinanceOrderExecutionService.ts:getOpenOrders`), while some re-throw new generic errors (`BinanceMarketDataAdapter.ts`). This inconsistency makes debugging difficult and can mask critical system failures.",
+        "recommended_action": "Establish a consistent error handling strategy. Avoid silently swallowing errors. For critical failures, re-throw original errors or wrap them in custom error types that preserve stack traces. For recoverable errors, return a `Result` type (e.g., `Either<Error, T>`) to explicitly indicate success or failure."
+      }
+    ]
+  }
+}
