@@ -123,17 +123,20 @@ export class SyncGridOrdersUseCase {
       (o) =>
         Math.abs(o.price - targetSellPrice) / targetSellPrice < PRICE_TOLERANCE,
     );
-    if (alreadyExists) {
-      this.logger.info(
-        `[SELL] Sell order already exists near ${targetSellPrice.toFixed(2)} ${quoteAsset}.`,
-      );
-      return;
-    }
 
     if (unhedgedQty * targetSellPrice < MIN_ORDER_NOTIONAL) {
       this.logger.warn(
         `[SELL] Skipped: notional too small ` +
           `(${unhedgedQty.toFixed(2)} ${baseAsset} × ${targetSellPrice.toFixed(2)} < ${MIN_ORDER_NOTIONAL} ${quoteAsset}).`,
+      );
+      return;
+    }
+    if (
+      alreadyExists &&
+      !(unhedgedQty * targetSellPrice > MIN_ORDER_NOTIONAL)
+    ) {
+      this.logger.info(
+        `[SELL] Sell order already exists near ${targetSellPrice.toFixed(2)} ${quoteAsset}.`,
       );
       return;
     }
