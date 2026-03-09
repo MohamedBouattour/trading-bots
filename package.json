@@ -1,14 +1,15 @@
 {
-  "name": "smart-grid",
+  "name": "momentum-sniper",
   "version": "1.0.0",
-  "description": "This report details the design, implementation, and backtesting of an enhanced, \"smart\" grid trading bot for the BTC/USDT cryptocurrency pair. The objective was to develop a more adaptive and profitable strategy, aiming for a 20-30% return over a 6-month period, by incorporating dynamic grid adjustments and trend-following mechanisms.",
+  "description": "Momentum Sniper Trading Bot - A high-probability one-shot momentum strategy for cryptocurrency markets.",
   "main": "index.js",
   "scripts": {
-    "build": "esbuild src/smart-grid/presentation/cli/run_bot.ts --bundle --platform=node --outfile=dist/smart-grid.js",
-    "backtest": "ts-node src/smart-grid/presentation/cli/backtest_cli.ts",
-    "optimize": "ts-node src/smart-grid/presentation/cli/optimize_cli.ts",
-    "optimize-roi": "ts-node src/smart-grid/presentation/cli/optimize_max_roi_cli.ts",
-    "open-order": "ts-node src/smart-grid/presentation/cli/open_order_cli.ts",
+    "build": "esbuild src/momentum-sniper/presentation/cli/run_bot.ts --bundle --platform=node --outfile=dist/momentum-sniper.js",
+    "backtest": "ts-node src/momentum-sniper/presentation/cli/backtest_cli.ts",
+    "batch-backtest": "ts-node src/momentum-sniper/presentation/cli/batch_backtest_cli.ts",
+    "optimize": "ts-node src/momentum-sniper/presentation/cli/optimize_cli.ts",
+    "optimize-roi": "ts-node src/momentum-sniper/presentation/cli/optimize_max_roi_cli.ts",
+    "open-order": "ts-node src/momentum-sniper/presentation/cli/open_order_cli.ts",
     "test": "vitest run"
   },
   "keywords": [],
