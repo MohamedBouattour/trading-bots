@@ -5,4 +5,6 @@ export interface Trade {
   quantity: number;
   reason?: string | null;
   pnl?: number;
+  stop_loss?: number;
+  take_profit?: number;
 }

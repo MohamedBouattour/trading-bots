@@ -6,4 +6,7 @@ export interface Order {
   status: "open" | "filled" | "cancelled";
   fill_price?: number;
   opened_at?: number;
+  stop_loss_price?: number;
+  take_profit_price?: number;
+  meta?: any;
 }

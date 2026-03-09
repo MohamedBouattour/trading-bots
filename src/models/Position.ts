@@ -5,6 +5,7 @@ export class Position {
   stop_loss_price: number;
   trailing_stop_pct: number;
   highest_price_seen: number;
+  meta?: any;
 
   constructor(
     entry_price: number,

@@ -2,9 +2,12 @@ import { MathUtils } from "../utils/MathUtils";
 
 export class IndicatorService {
   static computeATR(closes: number[], period: number = 14): number {
-    const changes = closes.slice(1).map((c, i) => Math.abs(c - closes[i]));
-    if (changes.length < period) return 0;
-    return changes.slice(-period).reduce((a, b) => a + b, 0) / period;
+    if (closes.length < period + 1) return 0;
+    const changes = [];
+    for (let i = closes.length - period; i < closes.length; i++) {
+        changes.push(Math.abs(closes[i] - closes[i-1]));
+    }
+    return changes.reduce((a, b) => a + b, 0) / period;
   }
 
   static computeVolatility(closes: number[], lookback_period: number): number {
@@ -61,7 +64,78 @@ export class IndicatorService {
     }
 
     if (losses === 0) return 100;
-    const rs = gains / period / (losses / period);
+    const rs = (gains / period) / (losses / period);
     return 100 - 100 / (1 + rs);
+  }
+
+  static computeBollingerBands(data: number[], period: number = 20, stdDevMult: number = 2): { upper: number, middle: number, lower: number } {
+    if (data.length < period) {
+        const last = data[data.length - 1] || 0;
+        return { upper: last, middle: last, lower: last };
+    }
+    const slice = data.slice(-period);
+    const middle = slice.reduce((a, b) => a + b, 0) / period;
+    const stdDev = MathUtils.stdDev(slice);
+    
+    return {
+      upper: middle + stdDevMult * stdDev,
+      middle: middle,
+      lower: middle - stdDevMult * stdDev
+    };
+  }
+
+  static computeVolumeSMA(volumes: number[], period: number = 20): number {
+    if (volumes.length < period) return volumes[volumes.length - 1] || 0;
+    const slice = volumes.slice(-period);
+    return slice.reduce((a, b) => a + b, 0) / period;
+  }
+
+  static computeEMA(data: number[], period: number): number {
+    if (data.length < period) return data[data.length - 1] || 0;
+    const k = 2 / (period + 1);
+    // Standard initialization: SMA of first 'period' elements
+    let ema = data.slice(0, period).reduce((a, b) => a + b, 0) / period;
+    // Recursive calculation for the rest
+    for (let i = period; i < data.length; i++) {
+      ema = data[i] * k + ema * (1 - k);
+    }
+    return ema;
+  }
+
+  static computeATR_HL(highs: number[], lows: number[], closes: number[], period: number): number {
+    if (closes.length < period + 1) return 0;
+    let trSum = 0;
+    const start = closes.length - period;
+    for (let i = start; i < closes.length; i++) {
+      const hl = highs[i] - lows[i];
+      const hpc = Math.abs(highs[i] - closes[i - 1]);
+      const lpc = Math.abs(lows[i] - closes[i - 1]);
+      trSum += Math.max(hl, hpc, lpc);
+    }
+    return trSum / period;
+  }
+
+  static computeADX(highs: number[], lows: number[], closes: number[], period: number = 14): number {
+    if (closes.length < period * 2) return 0;
+    const plusDM: number[] = [];
+    const minusDM: number[] = [];
+    for (let i = 1; i < closes.length; i++) {
+      const moveUp = highs[i] - highs[i - 1];
+      const moveDown = lows[i - 1] - lows[i];
+      plusDM.push(moveUp > 0 && moveUp > moveDown ? moveUp : 0);
+      minusDM.push(moveDown > 0 && moveDown > moveUp ? moveDown : 0);
+    }
+    const tr: number[] = [];
+    for (let i = 1; i < closes.length; i++) {
+      tr.push(Math.max(highs[i] - lows[i], Math.abs(highs[i] - closes[i - 1]), Math.abs(lows[i] - closes[i - 1])));
+    }
+    const smoothedPlusDM = this.computeEMA(plusDM, period);
+    const smoothedMinusDM = this.computeEMA(minusDM, period);
+    const smoothedTR = this.computeEMA(tr, period);
+    if (smoothedTR === 0) return 0;
+    const plusDI = 100 * (smoothedPlusDM / smoothedTR);
+    const minusDI = 100 * (smoothedMinusDM / smoothedTR);
+    const dx = 100 * Math.abs(plusDI - minusDI) / (plusDI + minusDI);
+    return dx;
   }
 }
