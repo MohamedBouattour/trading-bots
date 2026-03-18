@@ -18,5 +18,8 @@ export interface BotConfig {
   fee_pct?: number;
   rsi_threshold?: number;
   rsi_period?: number;
+  rsi_sma_period?: number;
+  rsi_under_sma_duration?: number;
   move_sl_to_be_at_pct?: number;
+  exit_on_trend_reversal?: boolean;
 }

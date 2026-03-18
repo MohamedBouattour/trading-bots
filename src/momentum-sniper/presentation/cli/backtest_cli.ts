@@ -5,7 +5,18 @@ import { LocalCsvMarketDataProvider } from "../../infrastructure/market_data/Loc
 import { SyntheticMarketDataProvider } from "../../infrastructure/market_data/SyntheticMarketDataProvider";
 import { CompositeMarketDataProvider } from "../../infrastructure/market_data/CompositeMarketDataProvider";
 import { HtmlReportGenerator } from "../../infrastructure/reporting/HtmlReportGenerator";
+import { RsiSmaCrossoverBot } from "../../domain/bot/RsiSmaCrossoverBot";
+import {
+  TrendRiderBot,
+  FixedTargetBot,
+  DeepValueBot,
+  PullbackRiderBot,
+  VolatilitySwingBot,
+  StructuralGridBot,
+} from "../../domain/bot/StrategyBots";
+import { RsiEmaTrendBot } from "../../domain/bot/RsiEmaTrendBot";
 import { BotConfig } from "../../../models/BotConfig";
+import { IBot } from "../../domain/bot/IBot";
 
 dotenv.config();
 
@@ -28,7 +39,10 @@ const CONFIG: BotConfig = {
   max_exposure_pct: parseFloat(process.env.MAX_EXPOSURE || "60.0"),
   max_drawdown_exit_pct: parseFloat(process.env.MAX_DD_EXIT || "10.0"),
   fee_pct: parseFloat(process.env.FEE_PCT || "0.1"),
-  rsi_threshold: parseFloat(process.env.RSI_THRESHOLD || "30.0"),
+  rsi_threshold: parseFloat(process.env.RSI_THRESHOLD || "45.0"),
+  rsi_period: parseInt(process.env.RSI_PERIOD || "14"),
+  rsi_sma_period: parseInt(process.env.RSI_SMA_PERIOD || "14"),
+  rsi_under_sma_duration: parseInt(process.env.RSI_UNDER_SMA_DURATION || "5"),
   move_sl_to_be_at_pct: parseFloat(process.env.MOVE_SL_TO_BE_AT_PCT || "0.0"),
 };
 
@@ -57,8 +71,38 @@ async function main() {
     reportGenerator,
   );
 
+  let bot: IBot;
+  const strategy = process.env.STRATEGY || "rsi_sma";
+
+  switch (strategy.toLowerCase()) {
+    case "trend_rider":
+      bot = new TrendRiderBot(CONFIG);
+      break;
+    case "fixed_target":
+      bot = new FixedTargetBot(CONFIG);
+      break;
+    case "deep_value":
+      bot = new DeepValueBot(CONFIG);
+      break;
+    case "pullback_rider":
+      bot = new PullbackRiderBot(CONFIG);
+      break;
+    case "volatility_swing":
+      bot = new VolatilitySwingBot(CONFIG);
+      break;
+    case "structural_grid":
+      bot = new StructuralGridBot(CONFIG);
+      break;
+    case "rsi_ema_trend":
+      bot = new RsiEmaTrendBot(CONFIG);
+      break;
+    default:
+      bot = new RsiSmaCrossoverBot(CONFIG);
+  }
+
+  console.log(`🤖 Strategy: ${strategy}`);
   const months = parseInt(process.env.MONTHS || "6");
-  await runBacktestUseCase.execute(CONFIG, OUTPUT_CHART_HTML, months, timeframe);
+  await runBacktestUseCase.execute(bot, OUTPUT_CHART_HTML, months, timeframe);
 }
 
 if (require.main === module) {

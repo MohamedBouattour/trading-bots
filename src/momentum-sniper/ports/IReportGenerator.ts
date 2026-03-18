@@ -1,6 +1,6 @@
 import { Candle } from "../../models/Candle";
-import { MomentumBot } from "../domain/bot/MomentumBot";
+import { IBot } from "../domain/bot/IBot";
 
 export interface IReportGenerator {
-  generateReport(df: Candle[], bot: MomentumBot, outputPath: string): void;
+  generateReport(df: Candle[], bot: IBot, outputPath: string): void;
 }

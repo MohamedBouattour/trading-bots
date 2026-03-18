@@ -5,7 +5,8 @@ export class Position {
   stop_loss_price: number;
   trailing_stop_pct: number;
   highest_price_seen: number;
-  meta?: any;
+  side: "LONG" | "SHORT";
+  meta?: Record<string, unknown>;
 
   constructor(
     entry_price: number,
@@ -13,12 +14,14 @@ export class Position {
     take_profit_price: number,
     stop_loss_price: number,
     trailing_stop_pct: number,
+    side: "LONG" | "SHORT" = "LONG",
   ) {
     this.entry_price = entry_price;
     this.quantity = quantity;
     this.take_profit_price = take_profit_price;
     this.stop_loss_price = stop_loss_price;
     this.trailing_stop_pct = trailing_stop_pct;
+    this.side = side;
     this.highest_price_seen = entry_price;
   }
 

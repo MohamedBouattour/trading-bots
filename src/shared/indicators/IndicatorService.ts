@@ -5,7 +5,7 @@ export class IndicatorService {
     if (closes.length < period + 1) return 0;
     const changes = [];
     for (let i = closes.length - period; i < closes.length; i++) {
-        changes.push(Math.abs(closes[i] - closes[i-1]));
+      changes.push(Math.abs(closes[i] - closes[i - 1]));
     }
     return changes.reduce((a, b) => a + b, 0) / period;
   }
@@ -64,23 +64,27 @@ export class IndicatorService {
     }
 
     if (losses === 0) return 100;
-    const rs = (gains / period) / (losses / period);
+    const rs = gains / period / (losses / period);
     return 100 - 100 / (1 + rs);
   }
 
-  static computeBollingerBands(data: number[], period: number = 20, stdDevMult: number = 2): { upper: number, middle: number, lower: number } {
+  static computeBollingerBands(
+    data: number[],
+    period: number = 20,
+    stdDevMult: number = 2,
+  ): { upper: number; middle: number; lower: number } {
     if (data.length < period) {
-        const last = data[data.length - 1] || 0;
-        return { upper: last, middle: last, lower: last };
+      const last = data[data.length - 1] || 0;
+      return { upper: last, middle: last, lower: last };
     }
     const slice = data.slice(-period);
     const middle = slice.reduce((a, b) => a + b, 0) / period;
     const stdDev = MathUtils.stdDev(slice);
-    
+
     return {
       upper: middle + stdDevMult * stdDev,
       middle: middle,
-      lower: middle - stdDevMult * stdDev
+      lower: middle - stdDevMult * stdDev,
     };
   }
 
@@ -102,7 +106,12 @@ export class IndicatorService {
     return ema;
   }
 
-  static computeATR_HL(highs: number[], lows: number[], closes: number[], period: number): number {
+  static computeATR_HL(
+    highs: number[],
+    lows: number[],
+    closes: number[],
+    period: number,
+  ): number {
     if (closes.length < period + 1) return 0;
     let trSum = 0;
     const start = closes.length - period;
@@ -115,7 +124,12 @@ export class IndicatorService {
     return trSum / period;
   }
 
-  static computeADX(highs: number[], lows: number[], closes: number[], period: number = 14): number {
+  static computeADX(
+    highs: number[],
+    lows: number[],
+    closes: number[],
+    period: number = 14,
+  ): number {
     if (closes.length < period * 2) return 0;
     const plusDM: number[] = [];
     const minusDM: number[] = [];
@@ -127,7 +141,13 @@ export class IndicatorService {
     }
     const tr: number[] = [];
     for (let i = 1; i < closes.length; i++) {
-      tr.push(Math.max(highs[i] - lows[i], Math.abs(highs[i] - closes[i - 1]), Math.abs(lows[i] - closes[i - 1])));
+      tr.push(
+        Math.max(
+          highs[i] - lows[i],
+          Math.abs(highs[i] - closes[i - 1]),
+          Math.abs(lows[i] - closes[i - 1]),
+        ),
+      );
     }
     const smoothedPlusDM = this.computeEMA(plusDM, period);
     const smoothedMinusDM = this.computeEMA(minusDM, period);
@@ -135,7 +155,75 @@ export class IndicatorService {
     if (smoothedTR === 0) return 0;
     const plusDI = 100 * (smoothedPlusDM / smoothedTR);
     const minusDI = 100 * (smoothedMinusDM / smoothedTR);
-    const dx = 100 * Math.abs(plusDI - minusDI) / (plusDI + minusDI);
+    const dx = (100 * Math.abs(plusDI - minusDI)) / (plusDI + minusDI);
     return dx;
+  }
+
+  static computeMACD(
+    data: number[],
+    fastPeriod: number = 12,
+    slowPeriod: number = 26,
+    signalPeriod: number = 9,
+  ): { macd: number; signal: number; histogram: number } {
+    if (data.length < slowPeriod + signalPeriod) {
+      return { macd: 0, signal: 0, histogram: 0 };
+    }
+
+    // Compute MACD line: Fast EMA - Slow EMA
+    // To get the signal line, we need a history of MACD values.
+    // Instead of computing the whole thing every time, we should ideally be more efficient,
+    // but follow the existing stateless pattern for now.
+
+    const macdLineHistory: number[] = [];
+    // We need at least signalPeriod of MACD values to compute Signal Line (EMA of MACD)
+    // To get those, we need to compute MACD for several past points.
+    const lookback = slowPeriod + signalPeriod + 50;
+    const startIdx = Math.max(0, data.length - lookback);
+    const relevantData = data.slice(startIdx);
+
+    const fastEMAValues = this.computeEMAHistory(relevantData, fastPeriod);
+    const slowEMAValues = this.computeEMAHistory(relevantData, slowPeriod);
+
+    for (let i = 0; i < fastEMAValues.length; i++) {
+      // Aligned at the end
+      const f = fastEMAValues[i];
+      const s = slowEMAValues[i];
+      macdLineHistory.push(f - s);
+    }
+
+    const macd = macdLineHistory[macdLineHistory.length - 1];
+    const signal = this.computeEMA(macdLineHistory, signalPeriod);
+    const histogram = macd - signal;
+
+    return { macd, signal, histogram };
+  }
+
+  // Internal helper to get EMA history which is needed for Signal line
+  private static computeEMAHistory(data: number[], period: number): number[] {
+    if (data.length < period)
+      return new Array(data.length).fill(data[data.length - 1] || 0);
+    const k = 2 / (period + 1);
+    const results: number[] = [];
+
+    let ema = data.slice(0, period).reduce((a, b) => a + b, 0) / period;
+    for (let i = 0; i < period; i++) results.push(ema); // Placeholder for warmup
+
+    for (let i = period; i < data.length; i++) {
+      ema = data[i] * k + ema * (1 - k);
+      results.push(ema);
+    }
+    return results;
+  }
+
+  static computeRollingMax(data: number[], period: number): number {
+    if (data.length === 0) return 0;
+    const slice = data.slice(-period);
+    return Math.max(...slice);
+  }
+
+  static computeRollingMin(data: number[], period: number): number {
+    if (data.length === 0) return 0;
+    const slice = data.slice(-period);
+    return Math.min(...slice);
   }
 }

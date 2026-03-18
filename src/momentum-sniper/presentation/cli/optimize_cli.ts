@@ -3,7 +3,7 @@ import { BinanceMarketDataProvider } from "../../infrastructure/market_data/Bina
 import { LocalCsvMarketDataProvider } from "../../infrastructure/market_data/LocalCsvMarketDataProvider";
 import { SyntheticMarketDataProvider } from "../../infrastructure/market_data/SyntheticMarketDataProvider";
 import { CompositeMarketDataProvider } from "../../infrastructure/market_data/CompositeMarketDataProvider";
-import { MomentumBot } from "../../domain/bot/MomentumBot";
+import { RsiSmaCrossoverBot } from "../../domain/bot/RsiSmaCrossoverBot";
 import { BotConfig } from "../../../models/BotConfig";
 
 dotenv.config();
@@ -84,7 +84,7 @@ async function main() {
   let tested = 0;
 
   function runBot(cfg: BotConfig): void {
-    const bot = new MomentumBot(cfg);
+    const bot = new RsiSmaCrossoverBot(cfg);
     const closes: number[] = [];
     const volumes: number[] = [];
 
@@ -128,11 +128,11 @@ async function main() {
   }
 
   // Full grid search
-  for (const tp of PARAM_GRID.take_profit_pct) {
-    for (const sl of PARAM_GRID.stop_loss_pct) {
-      for (const tpd of PARAM_GRID.trend_period) {
-        for (const ts of PARAM_GRID.trailing_stop_pct) {
-          for (const me of PARAM_GRID.max_exposure_pct) {
+  for (const tp of SEARCH_SPACE.take_profit_pct) {
+    for (const sl of SEARCH_SPACE.stop_loss_pct) {
+      for (const tpd of SEARCH_SPACE.trend_period) {
+        for (const ts of SEARCH_SPACE.trailing_stop_pct) {
+          for (const me of SEARCH_SPACE.max_exposure_pct) {
             const cfg: BotConfig = {
               symbol: symbolNormalized,
               initial_balance: initialBalance,

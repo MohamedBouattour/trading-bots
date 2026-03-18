@@ -1,7 +1,6 @@
 import { IMarketDataProvider } from "../../ports/IMarketDataProvider";
 import { IReportGenerator } from "../../ports/IReportGenerator";
-import { MomentumBot } from "../../domain/bot/MomentumBot";
-import { BotConfig } from "../../../models/BotConfig";
+import { IBot } from "../../domain/bot/IBot";
 
 export class RunBacktestUseCase {
   constructor(
@@ -10,7 +9,7 @@ export class RunBacktestUseCase {
   ) {}
 
   async execute(
-    config: BotConfig,
+    bot: IBot,
     outputPath: string,
     months: number = 6,
     timeframe: string = "1h",
@@ -19,7 +18,7 @@ export class RunBacktestUseCase {
     console.log(" Momentum Sniper — Backtester (TS)");
     console.log("=".repeat(60));
 
-    const symbol = config.symbol ?? "BTCUSDT";
+    const symbol = bot.symbol;
     const df = await this.marketDataProvider.getHistoricalData(
       symbol,
       timeframe,
@@ -38,39 +37,58 @@ export class RunBacktestUseCase {
     console.log(`  Data range : ${startDate} → ${endDate}`);
     console.log(`  Total rows : ${df.length}`);
 
-    const bot = new MomentumBot(config);
+    const config = bot.get_config();
+    // FIX #2: derive the history cap from the configured trend_period so that
+    // MomentumBot's guard (`closes_history.length < trend_period`) can always
+    // be satisfied. A buffer of 50 extra candles is added on top to give
+    // RSI and other secondary indicators enough look-back room.
+    const HISTORY_BUFFER = 50;
+    const historyCap = Math.max(
+      (config.trend_period ?? 200) + HISTORY_BUFFER,
+      300,
+    );
+
     const closes: number[] = [];
     const volumes: number[] = [];
     const highs: number[] = [];
     const lows: number[] = [];
 
-    // Memory efficient loop
     console.log(`\n  Running backtest on ${df.length} candles...`);
     for (const row of df) {
-      closes.push(row.close);
-      volumes.push(row.volume);
-      highs.push(row.high);
-      lows.push(row.low);
-      
-      // Prevent memory leak by capping history arrays
-      if (closes.length > 300) closes.shift();
-      if (volumes.length > 300) volumes.shift();
-      if (highs.length > 300) highs.shift();
-      if (lows.length > 300) lows.shift();
-
-      // IMPORTANT: Pass copies of arrays to ensure indicators use frozen history
+      // FIX #3: push history AFTER calling on_candle so that closes_history
+      // contains only prior (confirmed) candles. The bot receives the current
+      // bar's OHLC through the dedicated parameters and must not derive
+      // current_close from the tail of closes_history.
       bot.on_candle(
         row.timestamp,
         row.open,
         row.high,
         row.low,
         row.close,
-        [...closes],
+        row.volume,
+        [...closes], // prior closes — current bar is NOT yet included
         [...volumes],
         [...highs],
-        [...lows]
+        [...lows],
       );
+
+      closes.push(row.close);
+      volumes.push(row.volume);
+      highs.push(row.high);
+      lows.push(row.low);
+
+      // Trim to cap AFTER the push so the arrays never grow unboundedly.
+      if (closes.length > historyCap) closes.shift();
+      if (volumes.length > historyCap) volumes.shift();
+      if (highs.length > historyCap) highs.shift();
+      if (lows.length > historyCap) lows.shift();
     }
+
+    // FIX #5: settle any position still open when data ends.
+    // Without this, unrealized P&L inflates final_value while Total Trades
+    // and Win Rate both read 0 — because the sell trade was never recorded.
+    const lastCandle = df[df.length - 1];
+    bot.close_all_positions(lastCandle.close, lastCandle.timestamp);
 
     const results = bot.summary();
     console.log("\n" + "=".repeat(60));
@@ -83,7 +101,9 @@ export class RunBacktestUseCase {
       console.log(`  ${label.padEnd(25)} ${v}`);
     }
 
-    this.reportGenerator.generateReport(df, bot, outputPath);
+    // FIX #1: await the report generation so "Done." only prints after the
+    // file has been fully written and errors are not silently swallowed.
+    await this.reportGenerator.generateReport(df, bot, outputPath);
     console.log("\nDone.");
   }
 }
