@@ -1,13 +1,7 @@
 import { IndicatorService } from "../../../shared/indicators/IndicatorService";
 
-/**
- * Signal side for the trading strategy.
- */
 export type SignalSide = "LONG" | "SHORT" | "NONE";
 
-/**
- * Interface representing a single candle's data.
- */
 export interface OHLCV {
   timestamp: number;
   open: number;
@@ -17,9 +11,6 @@ export interface OHLCV {
   volume: number;
 }
 
-/**
- * Interface for the signal output metadata.
- */
 export interface StrategySignal {
   signal: SignalSide;
   entryPrice: number;
@@ -27,25 +18,43 @@ export interface StrategySignal {
   takeProfitPrice: number;
 }
 
+export interface RsiEmaTrendStrategyConfig {
+  emaPeriod?: number;          // default 100
+  rsiPeriod?: number;          // default 7
+  rsiSmaPeriod?: number;       // default 7
+  oversoldThreshold?: number;  // default 40
+  overboughtThreshold?: number;// default 60
+  confirmationLookback?: number; // default 5
+  slPct?: number;              // default 1.5
+  tpPct?: number;              // default 6.0
+}
+
 /**
- * Optimized RSI + 100 EMA Trend Follower Strategy.
+ * Optimized RSI + EMA Trend Follower Strategy.
+ * All parameters are injectable via constructor so that .env / BotConfig values
+ * are respected at runtime instead of being silently ignored.
  */
 export class RsiEmaTrendStrategy {
-  private readonly EMA_PERIOD = 100;
-  private readonly RSI_PERIOD = 7;
-  private readonly RSI_SMA_PERIOD = 7;
-  private readonly OVERSOLD_THRESHOLD = 40;
-  private readonly OVERBOUGHT_THRESHOLD = 60;
-  private readonly CONFIRMATION_LOOKBACK = 5;
+  private readonly EMA_PERIOD: number;
+  private readonly RSI_PERIOD: number;
+  private readonly RSI_SMA_PERIOD: number;
+  private readonly OVERSOLD_THRESHOLD: number;
+  private readonly OVERBOUGHT_THRESHOLD: number;
+  private readonly CONFIRMATION_LOOKBACK: number;
+  private readonly SL_PCT: number;
+  private readonly TP_PCT: number;
 
-  private readonly SL_PCT = 1.5;
-  private readonly TP_PCT = 6.0;
+  constructor(config: RsiEmaTrendStrategyConfig = {}) {
+    this.EMA_PERIOD           = config.emaPeriod           ?? 100;
+    this.RSI_PERIOD           = config.rsiPeriod           ?? 7;
+    this.RSI_SMA_PERIOD       = config.rsiSmaPeriod        ?? 7;
+    this.OVERSOLD_THRESHOLD   = config.oversoldThreshold   ?? 40;
+    this.OVERBOUGHT_THRESHOLD = config.overboughtThreshold ?? 60;
+    this.CONFIRMATION_LOOKBACK= config.confirmationLookback?? 5;
+    this.SL_PCT               = config.slPct               ?? 1.5;
+    this.TP_PCT               = config.tpPct               ?? 6.0;
+  }
 
-  /**
-   * Check for a trading signal based on historical OHLCV data.
-   * @param ohlcvData Array of OHLCV data, sorted by timestamp ascending.
-   * @returns StrategySignal object containing the signal and trade parameters.
-   */
   public checkSignal(ohlcvData: OHLCV[]): StrategySignal {
     const noSignal: StrategySignal = {
       signal: "NONE",
@@ -62,80 +71,59 @@ export class RsiEmaTrendStrategy {
     }
 
     const currentCandle = ohlcvData[ohlcvData.length - 1];
-    const _prevCandle = ohlcvData[ohlcvData.length - 2];
     const closes = ohlcvData.map((d) => d.close);
 
-    // Calculate Indicators
-    const ema100Current = IndicatorService.computeEMA(closes, this.EMA_PERIOD);
+    const ema = IndicatorService.computeEMA(closes, this.EMA_PERIOD);
 
-    // RSI 7
+    // Build a rolling window of RSI values large enough for RSI SMA + lookback
+    const minRequired = this.RSI_SMA_PERIOD + this.CONFIRMATION_LOOKBACK + 1;
     const rsiValues: number[] = [];
-    const minRequiredForRsiSma =
-      this.RSI_SMA_PERIOD + this.CONFIRMATION_LOOKBACK + 1;
-
-    for (
-      let i = ohlcvData.length - minRequiredForRsiSma;
-      i < ohlcvData.length;
-      i++
-    ) {
+    for (let i = ohlcvData.length - minRequired; i < ohlcvData.length; i++) {
       rsiValues.push(
         IndicatorService.computeRSI(closes.slice(0, i + 1), this.RSI_PERIOD),
       );
     }
 
-    const currentRsi = rsiValues[rsiValues.length - 1];
-    const prevRsi = rsiValues[rsiValues.length - 2];
+    const currentRsi  = rsiValues[rsiValues.length - 1];
+    const prevRsi     = rsiValues[rsiValues.length - 2];
 
-    // RSI SMA 7
-    const currentRsiSma = IndicatorService.computeSMA(
-      rsiValues,
-      this.RSI_SMA_PERIOD,
-    );
+    const currentRsiSma  = IndicatorService.computeSMA(rsiValues, this.RSI_SMA_PERIOD);
     const prevRsiHistory = rsiValues.slice(0, -1);
-    const prevRsiSma = IndicatorService.computeSMA(
-      prevRsiHistory,
-      this.RSI_SMA_PERIOD,
-    );
+    const prevRsiSma     = IndicatorService.computeSMA(prevRsiHistory, this.RSI_SMA_PERIOD);
 
-    // Confirmation logic: RSI 7 < 40 or RSI 7 > 60 within last 5 candles
-    const recentRsiHistory = rsiValues.slice(-this.CONFIRMATION_LOOKBACK);
-    const wasOversold = recentRsiHistory.some(
-      (v) => v < this.OVERSOLD_THRESHOLD,
-    );
-    const wasOverbought = recentRsiHistory.some(
-      (v) => v > this.OVERBOUGHT_THRESHOLD,
-    );
+    const recentRsi   = rsiValues.slice(-this.CONFIRMATION_LOOKBACK);
+    const wasOversold   = recentRsi.some((v) => v < this.OVERSOLD_THRESHOLD);
+    const wasOverbought = recentRsi.some((v) => v > this.OVERBOUGHT_THRESHOLD);
 
-    // Entry Logic
-    // Long Entry: close > EMA 100, RSI crosses above RSI SMA 7, confirmed by oversold
+    // LONG: close > EMA, RSI crosses above its SMA, confirmed oversold recently
     if (
-      currentCandle.close > ema100Current &&
+      currentCandle.close > ema &&
       prevRsi < prevRsiSma &&
       currentRsi > currentRsiSma &&
       wasOversold
     ) {
-      const entryPrice = currentCandle.close;
+      const entry = currentCandle.close;
       return {
         signal: "LONG",
-        entryPrice: entryPrice,
-        stopLossPrice: entryPrice * (1 - this.SL_PCT / 100),
-        takeProfitPrice: entryPrice * (1 + this.TP_PCT / 100),
+        entryPrice: entry,
+        stopLossPrice:   entry * (1 - this.SL_PCT / 100),
+        takeProfitPrice: entry * (1 + this.TP_PCT / 100),
       };
     }
 
-    // Short Entry: close < EMA 100, RSI crosses below RSI SMA 7, confirmed by overbought
+    // SHORT: close < EMA, RSI crosses below its SMA, confirmed overbought recently
     if (
-      currentCandle.close < ema100Current &&
+      currentCandle.close < ema &&
       prevRsi > prevRsiSma &&
       currentRsi < currentRsiSma &&
       wasOverbought
     ) {
-      const entryPrice = currentCandle.close;
+      const entry = currentCandle.close;
       return {
         signal: "SHORT",
-        entryPrice: entryPrice,
-        stopLossPrice: entryPrice * (1 + this.SL_PCT / 100),
-        takeProfitPrice: entryPrice * (1 - this.TP_PCT / 100),
+        entryPrice: entry,
+        stopLossPrice:   entry * (1 + this.SL_PCT / 100),
+        takeProfitPrice: entry * (1 - this.TP_PCT / 100),
       };
     }
 
