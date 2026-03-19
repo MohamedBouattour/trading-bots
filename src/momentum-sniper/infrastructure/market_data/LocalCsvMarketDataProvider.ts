@@ -32,7 +32,7 @@ export class LocalCsvMarketDataProvider implements IMarketDataProvider {
         close: string | number;
         volume: string | number;
       };
-      return (parsed.data as RawCandle[])
+      let candles = (parsed.data as RawCandle[])
         .filter((d) => d.timestamp)
         .map((d) => ({
           timestamp: Number(d.timestamp),
@@ -42,6 +42,15 @@ export class LocalCsvMarketDataProvider implements IMarketDataProvider {
           close: Number(d.close),
           volume: Number(d.volume),
         }));
+
+      if (_months && _months > 0) {
+        // Filter for last X months
+        const lastTimestamp = candles[candles.length - 1].timestamp;
+        const cutoff = lastTimestamp - _months * 30 * 24 * 60 * 60 * 1000;
+        candles = candles.filter((c) => c.timestamp >= cutoff);
+      }
+
+      return candles;
     }
 
     return [];

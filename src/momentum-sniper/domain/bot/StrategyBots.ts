@@ -299,7 +299,10 @@ export class FixedTargetBot extends BaseStrategyBot {
       } else if (high >= pos.entry_price * 1.24) {
         // Check if we already sold half. In this simple implementation, we can use meta.
         this._market_sell(pos, pos.entry_price * 1.24, "TP2 (24%)", timestamp);
-      } else if (high >= pos.entry_price * 1.16 && !pos.meta.tp1_hit) {
+      } else if (
+        high >= pos.entry_price * 1.16 &&
+        !(pos.meta as any)?.tp1_hit
+      ) {
         this._market_sell(
           pos,
           pos.entry_price * 1.16,
@@ -307,7 +310,7 @@ export class FixedTargetBot extends BaseStrategyBot {
           timestamp,
           pos.quantity * 0.5,
         );
-        pos.meta.tp1_hit = true;
+        if (pos.meta) (pos.meta as any).tp1_hit = true;
       }
     }
 
@@ -522,7 +525,7 @@ export class VolatilitySwingBot extends BaseStrategyBot {
         this._market_sell(pos, pos.stop_loss_price, "SL", timestamp);
       }
       // Take Profit 1: Upper BB
-      else if (high >= bb.upper && !pos.meta.tp1_hit) {
+      else if (high >= bb.upper && !(pos.meta as any)?.tp1_hit) {
         this._market_sell(
           pos,
           bb.upper,
@@ -530,12 +533,12 @@ export class VolatilitySwingBot extends BaseStrategyBot {
           timestamp,
           pos.quantity * 0.5,
         );
-        pos.meta.tp1_hit = true;
+        if (pos.meta) (pos.meta as any).tp1_hit = true;
         // Trail remainder: move SL to Entry or ATR trailing
         pos.stop_loss_price = Math.max(pos.stop_loss_price, pos.entry_price);
       }
       // Trail remainder using EMA 9 for exit once TP1 hit
-      else if (pos.meta.tp1_hit) {
+      else if ((pos.meta as any)?.tp1_hit) {
         const ema9 = IndicatorService.computeEMA(closes_history, 9);
         if (close < ema9) {
           this._market_sell(pos, close, "TRAILING_EMA9", timestamp);
