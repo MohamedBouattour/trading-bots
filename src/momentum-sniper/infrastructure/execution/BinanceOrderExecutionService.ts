@@ -26,7 +26,10 @@ export class BinanceOrderExecutionService implements IOrderExecutor {
   private timeOffset: number = 0;
   private isTimeSynced: boolean = false;
 
-  constructor(apiKey: string, apiSecret: string) {
+  private useFutures: boolean = false;
+
+  constructor(apiKey: string, apiSecret: string, useFutures: boolean = false) {
+    this.useFutures = useFutures;
     this.client = Binance({
       apiKey,
       apiSecret,
@@ -35,6 +38,7 @@ export class BinanceOrderExecutionService implements IOrderExecutor {
   }
 
   private exchangeInfo: BinanceExchangeInfo | null = null;
+  private futuresExchangeInfo: any | null = null;
 
   private async ensureTimeSync() {
     if (!this.isTimeSynced) {
@@ -51,28 +55,66 @@ export class BinanceOrderExecutionService implements IOrderExecutor {
     }
   }
 
+  async setLeverage(symbol: string, leverage: number): Promise<void> {
+    if (!this.useFutures) return;
+    await this.ensureTimeSync();
+    try {
+      console.log(`[Futures] Setting leverage to ${leverage}x for ${symbol}`);
+      await this.client.futuresLeverage({
+        symbol,
+        leverage,
+      });
+      console.log(`[Futures] Leverage set to ${leverage}x.`);
+    } catch (error) {
+      console.error(`[Futures] Failed to set leverage:`, error);
+    }
+  }
+
   private async getSymbolFilters(symbol: string) {
     await this.ensureTimeSync();
-    if (!this.exchangeInfo) {
-      this.exchangeInfo = await this.client.exchangeInfo();
+    if (this.useFutures) {
+      if (!this.futuresExchangeInfo) {
+        this.futuresExchangeInfo = await this.client.futuresExchangeInfo();
+      }
+      const symbolInfo = this.futuresExchangeInfo!.symbols.find(
+        (s: any) => s.symbol === symbol,
+      );
+      if (!symbolInfo)
+        throw new Error(`Symbol ${symbol} not found in futures exchange info.`);
+
+      const priceFilter = symbolInfo.filters.find(
+        (f: any) => f.filterType === "PRICE_FILTER",
+      );
+      const lotSize = symbolInfo.filters.find(
+        (f: any) => f.filterType === "LOT_SIZE",
+      );
+
+      return {
+        tickSize: priceFilter?.tickSize || "0.01",
+        stepSize: lotSize?.stepSize || "0.0001",
+      };
+    } else {
+      if (!this.exchangeInfo) {
+        this.exchangeInfo = await this.client.exchangeInfo();
+      }
+      const symbolInfo = this.exchangeInfo!.symbols.find(
+        (s: BinanceSymbol) => s.symbol === symbol,
+      );
+      if (!symbolInfo)
+        throw new Error(`Symbol ${symbol} not found in exchange info.`);
+
+      const priceFilter = symbolInfo.filters.find(
+        (f: BinanceFilter) => f.filterType === "PRICE_FILTER",
+      );
+      const lotSize = symbolInfo.filters.find(
+        (f: BinanceFilter) => f.filterType === "LOT_SIZE",
+      );
+
+      return {
+        tickSize: priceFilter?.tickSize || "0.01",
+        stepSize: lotSize?.stepSize || "0.0001",
+      };
     }
-    const symbolInfo = this.exchangeInfo!.symbols.find(
-      (s: BinanceSymbol) => s.symbol === symbol,
-    );
-    if (!symbolInfo)
-      throw new Error(`Symbol ${symbol} not found in exchange info.`);
-
-    const priceFilter = symbolInfo.filters.find(
-      (f: BinanceFilter) => f.filterType === "PRICE_FILTER",
-    );
-    const lotSize = symbolInfo.filters.find(
-      (f: BinanceFilter) => f.filterType === "LOT_SIZE",
-    );
-
-    return {
-      tickSize: priceFilter?.tickSize || "0.01",
-      stepSize: lotSize?.stepSize || "0.0001",
-    };
   }
 
   private roundByStep(value: number, step: string): string {
@@ -104,24 +146,43 @@ export class BinanceOrderExecutionService implements IOrderExecutor {
     await this.ensureTimeSync();
     try {
       console.log(
-        `Opening ${side} order for ${symbol}. Quote Amount: ${quoteQty}`,
+        `Opening ${this.useFutures ? "FUTURES" : "SPOT"} ${side} order for ${symbol}. Quote Amount: ${quoteQty}`,
       );
 
-      // Market orders by quoteQty don't usually need precision rounding for the USDT amount,
-      // but let's keep it clean.
-      const orderOptions = {
-        symbol: symbol,
-        side: side as unknown as OrderSide,
-        type: OrderType.MARKET,
-        quoteOrderQty: quoteQty.toFixed(2),
-      };
+      if (this.useFutures) {
+        // Futures don't always support quoteOrderQty, some require quantity
+        // Let's use quantity for futures by calculating from price
+        const prices = await this.client.prices();
+        const price = parseFloat(prices[symbol]);
+        const { stepSize } = await this.getSymbolFilters(symbol);
+        const quantity = this.roundByStep(quoteQty / price, stepSize);
 
-      if (testOnly) {
-        console.log("--- TEST MODE: Sending test order ---");
-        await this.client.orderTest(orderOptions);
+        const orderOptions = {
+          symbol: symbol,
+          side: side as unknown as OrderSide,
+          type: "MARKET" as OrderType,
+          quantity: quantity,
+        };
+
+        console.log(
+          `[Futures] Executing order: ${side} ${quantity} ${symbol} @ ~${price}`,
+        );
+        await this.client.futuresOrder(orderOptions);
       } else {
-        console.log("--- LIVE MODE: Sending market order ---");
-        await this.client.order(orderOptions);
+        const orderOptions = {
+          symbol: symbol,
+          side: side as unknown as OrderSide,
+          type: OrderType.MARKET,
+          quoteOrderQty: quoteQty.toFixed(2),
+        };
+
+        if (testOnly) {
+          console.log("--- TEST MODE: Sending test order ---");
+          await this.client.orderTest(orderOptions);
+        } else {
+          console.log("--- LIVE MODE: Sending market order ---");
+          await this.client.order(orderOptions);
+        }
       }
     } catch (error) {
       console.error(`Failed to execute order:`, error);
@@ -134,10 +195,31 @@ export class BinanceOrderExecutionService implements IOrderExecutor {
   > {
     await this.ensureTimeSync();
     try {
-      const info = await this.client.accountInfo();
-      return info.balances;
+      if (this.useFutures) {
+        const info = await this.client.futuresAccountInfo();
+        return info.assets.map((a: any) => ({
+          asset: a.asset,
+          free: a.availableBalance,
+          locked: "0", // Futures balance structure is different
+        }));
+      } else {
+        const info = await this.client.accountInfo();
+        return info.balances;
+      }
     } catch (error) {
       console.error("Failed to fetch account info:", error);
+      return [];
+    }
+  }
+
+  async getFuturesPositions(): Promise<any[]> {
+    if (!this.useFutures) return [];
+    await this.ensureTimeSync();
+    try {
+      const info = await this.client.futuresAccountInfo();
+      return info.positions.filter((p: any) => parseFloat(p.positionAmt) !== 0);
+    } catch (error) {
+      console.error("Failed to fetch futures positions:", error);
       return [];
     }
   }

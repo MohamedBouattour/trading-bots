@@ -58,12 +58,26 @@ function log(msg: string) {
 }
 
 async function main() {
-  log(`🚀 MOMENTUM SNIPER | ${symbol} | ${timeframe}`);
+  const useFutures = process.env.USE_FUTURES === "true";
+  const leverage = parseInt(process.env.LEVERAGE || "1");
+
+  log(
+    `🚀 MOMENTUM SNIPER | ${symbol} | ${timeframe} | ${useFutures ? "FUTURES (" + leverage + "x)" : "SPOT"}`,
+  );
 
   const marketData = new BinanceMarketDataProvider();
-  const executor = new BinanceOrderExecutionService(apiKey, apiSecret);
+  const executor = new BinanceOrderExecutionService(
+    apiKey,
+    apiSecret,
+    useFutures,
+  );
+
+  if (useFutures && apiKey && apiSecret) {
+    await executor.setLeverage(symbolNormalized, leverage);
+  }
 
   // 1. Fetch Latest Data
+  log(`📡 Fetching historical data...`);
   const candles = await marketData.getHistoricalData(
     symbolNormalized,
     timeframe,
@@ -77,6 +91,9 @@ async function main() {
   const lastCandle = candles[candles.length - 1];
   const lastCandleTime = lastCandle.timestamp;
   const currentPrice = lastCandle.close;
+  log(
+    `✅ Data loaded: ${candles.length} candles. Last: ${new Date(lastCandleTime).toLocaleString()}`,
+  );
 
   // 2. Setup Bot Config
   const config: BotConfig = {
@@ -122,19 +139,19 @@ async function main() {
   };
 
   if (fs.existsSync(STATE_FILE)) {
+    log(`📂 Loading existing state from ${STATE_FILE}`);
     state = JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
     if (strategyName === "rsi_sma") {
       bot = RsiSmaCrossoverBot.fromJSON(JSON.stringify(state), config);
     } else {
       bot = createBot(strategyName, config);
       // For other bots, we might not have fromJSON, so we just initialize fresh or try to load state manually if needed
-      // Most simple bots here don't have complex internal state yet
     }
     (bot as unknown as { initial_balance: number }).initial_balance =
       config.initial_balance ?? 1000;
   } else {
     log(
-      `📦 Initializing fresh state for strategy: ${strategyName} (Silent Warmup)...`,
+      `📦 Initializing fresh state for strategy: ${strategyName} (Warmup)...`,
     );
     bot = createBot(strategyName, config);
     const closes = candles.map((c) => c.close);
@@ -169,95 +186,143 @@ async function main() {
 
   if (apiKey && apiSecret && apiKey.length > 10) {
     try {
+      log(`🔄 Syncing with Binance...`);
       const balances = await executor.getAccountBalances();
+      const usdtAsset = useFutures ? "USDT" : "USDT"; // Both use USDT as base usually
       const usdt = balances.find(
-        (b: { asset: string; free: string }) => b.asset === "USDT",
-      );
-      const assetSymbol = symbol.split("/")[0];
-      const asset = balances.find(
-        (b: { asset: string; free: string; locked: string }) =>
-          b.asset === assetSymbol,
+        (b: { asset: string; free: string }) => b.asset === usdtAsset,
       );
 
       if (usdt) {
         realUsdtBalance = parseFloat(usdt.free);
         bot.balance = realUsdtBalance;
+        log(`💰 USDT Balance: ${realUsdtBalance.toFixed(2)}`);
       }
-      if (asset) {
-        realAssetQty = parseFloat(asset.free) + parseFloat(asset.locked);
 
-        // SYNC POSITION STATE: If Binance says 0, but bot thinks it has a position, CLEAR IT.
-        if (realAssetQty < 0.00001 && bot.positions.length > 0) {
+      const assetSymbol = symbol.split("/")[0];
+      if (useFutures) {
+        const positions = await executor.getFuturesPositions();
+        const pos = positions.find((p: any) => p.symbol === symbolNormalized);
+        if (pos) {
+          realAssetQty = Math.abs(parseFloat(pos.positionAmt));
           log(
-            "⚠️ SYNC: Binance has 0 asset. Clearing " +
-              symbol +
-              " position from internal memory.",
+            `🎯 Ongoing Futures Position found: ${realAssetQty} ${assetSymbol}`,
+          );
+
+          if (bot.positions.length === 0) {
+            log(
+              `⚠️ Bot had no internal position but Binance has one. Syncing...`,
+            );
+            // We could inject a dummy position here if needed, but the user said "bot will do nothing"
+            // So if we have an ongoing position, we just make sure we don't buy more.
+            // We'll treat it as if the bot has a position if realAssetQty > 0
+          }
+        } else {
+          realAssetQty = 0;
+          if (bot.positions.length > 0) {
+            log(
+              `⚠️ Bot thought it had a position but Binance has none. Clearing...`,
+            );
+            bot.positions = [];
+          }
+        }
+      } else {
+        const asset = balances.find(
+          (b: { asset: string; free: string; locked: string }) =>
+            b.asset === assetSymbol,
+        );
+        if (asset) {
+          realAssetQty = parseFloat(asset.free) + parseFloat(asset.locked);
+          if (realAssetQty < 0.00001 && bot.positions.length > 0) {
+            log(`⚠️ SYNC: Binance has 0 asset. Clearing ${symbol} position.`);
+            bot.positions = [];
+          }
+        } else if (bot.positions.length > 0) {
+          log(
+            `⚠️ SYNC: Asset not found in account. Clearing internal position.`,
           );
           bot.positions = [];
+          realAssetQty = 0;
         }
-        // If Binance HAS asset, but bot thinks it doesn't, we should ideally track it,
-        // but for now, we'll just ensure the bot doesn't try to buy more than it can.
-      } else if (bot.positions.length > 0) {
-        log("⚠️ SYNC: Asset not found in account. Clearing internal position.");
-        bot.positions = [];
-        realAssetQty = 0;
       }
-      log("✅ SYNC: Account data fetched from Binance.");
-    } catch (_e) {
-      log("⚠️ WARNING: Could not sync with Binance API.");
+      log("✅ SYNC: Account data synchronized.");
+    } catch (e: any) {
+      log(`⚠️ WARNING: Could not sync with Binance API: ${e.message}`);
     }
   }
 
   // 5. Run Strategy Logic
   if (!state || state.last_processed_candle !== lastCandleTime) {
-    const closes = candles.map((c) => c.close);
-    const ema = IndicatorService.computeEMA(closes, config.trend_period || 100);
-    const rsi = IndicatorService.computeRSI(closes, 14);
+    if (realAssetQty > 0.0001 && bot.positions.length === 0) {
+      log(
+        `🛑 SKIP: Ongoing position found on Binance (${realAssetQty}) that is NOT tracked by bot state. Doing nothing to avoid conflicts.`,
+      );
+      bot.on_candle(
+        lastCandle.timestamp,
+        lastCandle.open,
+        lastCandle.high,
+        lastCandle.low,
+        lastCandle.close,
+        lastCandle.volume,
+        candles.map((c) => c.close),
+      ); // Just to update indicators in memory
+    } else {
+      const closes = candles.map((c) => c.close);
+      const ema = IndicatorService.computeEMA(
+        closes,
+        config.trend_period || 100,
+      );
+      const rsi = IndicatorService.computeRSI(closes, 14);
 
-    log(
-      `📊 MARKET: Price: ${lastCandle.close.toFixed(2)} | EMA(${config.trend_period}): ${ema.toFixed(2)} | RSI: ${rsi.toFixed(1)}`,
-    );
+      log(
+        `📊 MARKET: Price: ${lastCandle.close.toFixed(2)} | EMA(${config.trend_period}): ${ema.toFixed(2)} | RSI: ${rsi.toFixed(1)}`,
+      );
 
-    const prevPositionsCount = bot.positions.length;
-    bot.on_candle(
-      lastCandle.timestamp,
-      lastCandle.open,
-      lastCandle.high,
-      lastCandle.low,
-      lastCandle.close,
-      lastCandle.volume,
-      closes,
-    );
+      const prevPositionsCount = bot.positions.length;
+      bot.on_candle(
+        lastCandle.timestamp,
+        lastCandle.open,
+        lastCandle.high,
+        lastCandle.low,
+        lastCandle.close,
+        lastCandle.volume,
+        closes,
+      );
 
-    if (apiKey && apiSecret && apiKey.length > 10) {
-      const currentPosCount = bot.positions.length;
+      if (apiKey && apiSecret && apiKey.length > 10) {
+        const currentPosCount = bot.positions.length;
 
-      // Handle BUY
-      if (currentPosCount > prevPositionsCount) {
-        const newPos = bot.positions[bot.positions.length - 1];
-        const usdtToSpend = newPos.quantity * newPos.entry_price;
-        log(
-          `🔥 SIGNAL: BUYING ${symbol} | Amount: ${usdtToSpend.toFixed(2)} USDT`,
-        );
-        await executor.openMarketOrder(symbolNormalized, "BUY", usdtToSpend);
-      }
+        // Handle BUY
+        if (currentPosCount > prevPositionsCount) {
+          const newPos = bot.positions[bot.positions.length - 1];
+          const usdtToSpend = (newPos.quantity * newPos.entry_price) / leverage; // Account for leverage
+          log(
+            `🔥 SIGNAL: BUYING ${symbol} | Initial Margin: ${usdtToSpend.toFixed(2)} USDT (Leverage: ${leverage}x)`,
+          );
+          await executor.openMarketOrder(
+            symbolNormalized,
+            "BUY",
+            usdtToSpend * leverage,
+          ); // Total Notional
+        }
 
-      // Handle SELL
-      const lastTrade = bot.trade_log[bot.trade_log.length - 1];
-      if (
-        lastTrade &&
-        lastTrade.side === "sell" &&
-        lastTrade.timestamp === lastCandleTime
-      ) {
-        log(
-          `💰 SIGNAL: SELLING ${symbol} @ ${lastTrade.price} | REASON: ${lastTrade.reason}`,
-        );
-        // For sells, we usually want to sell the specific asset quantity we have
-        await executor.openMarketOrder(
-          symbolNormalized,
-          "SELL",
-          lastTrade.quantity * lastTrade.price, // quoteOrderQty approach
-        );
+        // Handle SELL
+        const lastTrade = bot.trade_log[bot.trade_log.length - 1];
+        if (
+          lastTrade &&
+          lastTrade.side === "sell" &&
+          lastTrade.timestamp === lastCandleTime
+        ) {
+          log(
+            `💰 SIGNAL: SELLING ${symbol} @ ${lastTrade.price} | REASON: ${lastTrade.reason}`,
+          );
+          // For sells, we usually want to sell the specific asset quantity we have
+          await executor.openMarketOrder(
+            symbolNormalized,
+            "SELL",
+            lastTrade.quantity * lastTrade.price, // quoteOrderQty approach
+          );
+        }
       }
     }
 

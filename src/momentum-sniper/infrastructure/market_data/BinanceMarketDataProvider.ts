@@ -3,7 +3,9 @@ import { Candle } from "../../../models/Candle";
 import { IMarketDataProvider } from "../../ports/IMarketDataProvider";
 
 export class BinanceMarketDataProvider implements IMarketDataProvider {
-  private readonly BINANCE_KLINES_URL = "https://api.binance.com/api/v3/klines";
+  private readonly BINANCE_SPOT_URL = "https://api.binance.com/api/v3/klines";
+  private readonly BINANCE_FUTURES_URL =
+    "https://fapi.binance.com/fapi/v1/klines";
 
   async getHistoricalData(
     symbol: string = "BTCUSDT",
@@ -11,13 +13,18 @@ export class BinanceMarketDataProvider implements IMarketDataProvider {
     limit: number = 1000,
     months: number = 6,
   ): Promise<Candle[]> {
+    const useFutures = process.env.USE_FUTURES === "true";
+    const baseUrl = useFutures
+      ? this.BINANCE_FUTURES_URL
+      : this.BINANCE_SPOT_URL;
+
     const end_ms = Date.now();
     let start_ms = end_ms - months * 30 * 24 * 60 * 60 * 1000;
     const rows: Candle[] = [];
 
     while (start_ms < end_ms) {
       try {
-        const resp = await axios.get(this.BINANCE_KLINES_URL, {
+        const resp = await axios.get(baseUrl, {
           params: {
             symbol: symbol,
             interval: interval,
