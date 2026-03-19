@@ -170,8 +170,12 @@ export abstract class BaseStrategyBot implements IBot {
       const dd = (peak - eq) / peak;
       if (dd > max_dd) max_dd = dd;
     }
-    const sell_trades = this.trade_log.filter((t) => t.side === "sell");
-    const wins = sell_trades.filter((t) => (t.pnl ?? 0) > 0).length;
+
+    // Fix: filter closing trades only (those with a defined pnl).
+    // This correctly handles both LONG exits (side='sell') and SHORT exits (side='buy').
+    const closing_trades = this.trade_log.filter((t) => t.pnl !== undefined);
+    const wins = closing_trades.filter((t) => (t.pnl ?? 0) > 0).length;
+
     return {
       period: `${new Date(this._start_timestamp ?? 0).toLocaleDateString()} to ${new Date(this._end_timestamp ?? 0).toLocaleDateString()}`,
       duration: `${Math.ceil(((this._end_timestamp ?? 0) - (this._start_timestamp ?? 0)) / 86400000)} days`,
@@ -179,9 +183,9 @@ export abstract class BaseStrategyBot implements IBot {
       final_value: `${final_equity.toFixed(2)} $`,
       total_profit: `${profit.toFixed(2)} $`,
       roi_pct: `${roi.toFixed(2)} %`,
-      total_trades: sell_trades.length,
+      total_trades: closing_trades.length,
       max_drawdown_pct: `${(max_dd * 100).toFixed(2)} %`,
-      win_rate: `${sell_trades.length > 0 ? ((wins / sell_trades.length) * 100).toFixed(2) : "0"} %`,
+      win_rate: `${closing_trades.length > 0 ? ((wins / closing_trades.length) * 100).toFixed(2) : "0"} %`,
     };
   }
 
