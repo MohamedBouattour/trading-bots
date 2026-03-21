@@ -153,89 +153,289 @@ export class HtmlReportGenerator implements IReportGenerator {
       downsampledEquity.push(equity[i]);
     }
 
+    // ── README content (kept in sync with repo README.md) ──────────────────
+    const readmeMd = `
+# Momentum Sniper Trading Bot
+
+An advanced **One-Shot** momentum trading bot for cryptocurrency spot markets (Binance).
+
+## 🚀 Key Features
+- **One-Shot Execution**: Concentrates capital on high-probability signals.
+- **Trend-Following**: Aligns entries with long-term market momentum (EMA ${trendPeriod}).
+- **Multiple Strategies**: Includes implementations for Pullbacks, Crossovers, and Mean Reversion.
+- **Dynamic Risk Management**: Integrated Stop Loss, Take Profit, and Trailing Stop.
+- **Backtesting & Optimization**: Built-in tools to verify and fine-tune parameters using historical data.
+- **State Persistence**: Saves bot state between cron runs to maintain continuity.
+
+## 📁 Directory Structure
+\`\`\`
+src/
+├── momentum-sniper/    # Main bot module
+│   ├── application/    # Use cases (Backtest logic)
+│   ├── domain/         # Core bot logic (MomentumBot)
+│   ├── infrastructure/ # External services (Binance, Market Data, Reporting)
+│   ├── ports/          # Interfaces
+│   └── presentation/   # CLI entry points
+├── models/             # Shared data models (Position, Order, BotConfig)
+└── shared/             # Common utilities and indicators
+\`\`\`
+
+## 🛠 Setup
+1. Clone the repository.
+2. Install dependencies: \`npm install\`.
+3. Create a \`.env\` file based on \`.env.example\`.
+4. Run a backtest: \`npm run backtest\`.
+
+## 📈 Strategy — Entry Conditions
+
+### ▲ LONG Entry
+1. Price is **above** EMA-${trendPeriod} (uptrend confirmed).
+2. RSI crosses **above 50** (momentum shift to bullish).
+3. Fresh crossover only — previous candle RSI must have been ≤ 50.
+
+### ▼ SHORT Entry
+1. Price is **below** EMA-${trendPeriod} (downtrend confirmed).
+2. RSI crosses **below 50** (momentum shift to bearish).
+3. Fresh crossover only — previous candle RSI must have been ≥ 50.
+
+## ⚖️ License
+ISC
+`;
+
+    // ── Stat card colour helper ───────────────────────────────────────────
+    const statColor = (key: string, _val: string): string => {
+      const k = key.toLowerCase();
+      if (k.includes("profit") || k.includes("roi") || k.includes("final"))
+        return "#3fb950";
+      if (k.includes("drawdown")) return "#ef5350";
+      if (k.includes("win_rate")) return "#e3b341";
+      if (k.includes("total_trades")) return "#58a6ff";
+      return "#c9d1d9";
+    };
+
     const html = `<!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Momentum Sniper Analysis</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Momentum Sniper — Backtest Results</title>
+    <meta name="description" content="Momentum Sniper trading bot backtest analysis and performance report.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
-        body { background-color: #0d1117; color: white; font-family: sans-serif; margin: 0; padding: 20px; }
-        .container { width: 95%; margin: auto; }
-        .chart-container { 
-            width: 100%; 
-            margin: 20px auto; 
-            padding: 20px; 
-            background: #161b22; 
-            border-radius: 8px; 
-            border: 1px solid #30363d;
-            box-sizing: border-box;
+        /* ── Design tokens ── */
+        :root {
+            --bg:      #0d1117;
+            --surface: #161b22;
+            --surf2:   #21262d;
+            --border:  #30363d;
+            --text:    #c9d1d9;
+            --muted:   #8b949e;
+            --accent:  #58a6ff;
+            --green:   #3fb950;
+            --red:     #ef5350;
+            --orange:  #e3b341;
+            --mono:    "JetBrains Mono", monospace;
         }
-        h1, h2 { text-align: center; color: #58a6ff; }
-        .summary { display: flex; justify-content: space-around; flex-wrap: wrap; margin-bottom: 30px; }
-        .stat-card { background: #21262d; padding: 15px; border-radius: 6px; border: 1px solid #30363d; margin: 10px; text-align: center; min-width: 120px; }
-        .stat-value { font-size: 1.5em; font-weight: bold; color: #3fb950; }
-        .stat-label { font-size: 0.8em; color: #8b949e; }
-        table { width: 100%; border-collapse: collapse; color: #c9d1d9; margin-top: 20px; }
-        th { background: #21262d; color: #58a6ff; text-align: left; padding: 12px; }
-        td { padding: 12px; border-bottom: 1px solid #30363d; }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: "Inter", sans-serif;
+            font-size: 14px;
+            line-height: 1.6;
+            padding: 24px;
+        }
+        .container { width: 95%; max-width: 1400px; margin: auto; }
+
+        /* ── Page header ── */
+        .page-header { text-align: center; margin-bottom: 32px; }
+        .page-header h1 {
+            font-size: 2rem; font-weight: 700; color: var(--accent); letter-spacing: -.5px;
+        }
+        .page-header .subtitle { color: var(--muted); margin-top: 6px; font-size: .95rem; }
+
+        /* ── README panel ── */
+        .readme-panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            margin-bottom: 32px;
+            overflow: hidden;
+        }
+        .readme-header {
+            display: flex; align-items: center; gap: 10px;
+            padding: 12px 20px;
+            background: var(--surf2);
+            border-bottom: 1px solid var(--border);
+            font-size: .82rem; color: var(--muted); font-weight: 500;
+        }
+        .readme-header .rh-title { color: var(--text); font-weight: 600; }
+        .readme-body { padding: 28px 32px; }
+        .readme-body h1 {
+            font-size: 1.5rem; color: var(--text); font-weight: 700;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 10px; margin-bottom: 12px;
+        }
+        .readme-body h2 { font-size: 1.05rem; color: var(--accent); margin: 22px 0 8px; font-weight: 600; }
+        .readme-body h3 { font-size: .95rem; color: var(--green); margin: 16px 0 6px; font-weight: 600; }
+        .readme-body p  { margin-bottom: 10px; color: var(--muted); }
+        .readme-body strong { color: var(--text); }
+        .readme-body ul, .readme-body ol { padding-left: 20px; margin-bottom: 12px; color: var(--muted); }
+        .readme-body li { margin-bottom: 3px; }
+        .readme-body li strong { color: var(--accent); }
+        .readme-body code {
+            font-family: var(--mono); font-size: .8rem;
+            background: var(--surf2); border: 1px solid var(--border);
+            padding: 2px 6px; border-radius: 4px; color: var(--orange);
+        }
+        .readme-body pre {
+            background: var(--surf2); border: 1px solid var(--border);
+            border-radius: 8px; padding: 14px; overflow-x: auto; margin-bottom: 12px;
+        }
+        .readme-body pre code {
+            background: none; border: none; padding: 0;
+            color: var(--green); font-size: .8rem; line-height: 1.7;
+        }
+        .readme-body hr { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
+
+        /* ── Stat cards ── */
+        .summary { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 28px; }
+        .stat-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 8px; padding: 14px 18px;
+            min-width: 130px; flex: 1 1 130px; text-align: center;
+            transition: border-color .2s;
+        }
+        .stat-card:hover { border-color: var(--accent); }
+        .stat-label {
+            font-size: .68rem; text-transform: uppercase;
+            letter-spacing: 1px; color: var(--muted); margin-bottom: 5px;
+        }
+        .stat-value { font-family: var(--mono); font-size: 1.2rem; font-weight: 700; }
+
+        /* ── Chart sections ── */
+        .section-title {
+            font-size: .68rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 1.4px; color: var(--muted); margin-bottom: 14px;
+        }
+        .chart-container {
+            width: 100%; margin-bottom: 24px; padding: 20px;
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 10px;
+        }
+        h2 { text-align: center; color: var(--accent); font-size: 1rem; margin-bottom: 16px; font-weight: 600; }
         #candleChart { height: 600px; width: 100%; }
+
+        /* ── Trade table ── */
+        table { width: 100%; border-collapse: collapse; color: var(--text); margin-top: 8px; }
+        th {
+            background: var(--surf2); color: var(--accent);
+            text-align: left; padding: 10px 14px;
+            font-size: .68rem; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 1px;
+            border-bottom: 1px solid var(--border);
+        }
+        td { padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: .86rem; }
+        tr:hover td { background: rgba(88,166,255,.04); }
+        .badge {
+            display: inline-block; padding: 2px 8px; border-radius: 20px;
+            font-size: .72rem; font-weight: 700; font-family: var(--mono);
+        }
+        .badge-long  { background: rgba(88,166,255,.15); color: #58a6ff; }
+        .badge-short { background: rgba(255,166,87,.15);  color: #ffa657; }
+        .badge-tp    { background: rgba(63,185,80,.15);   color: #3fb950; }
+        .badge-sl    { background: rgba(239,83,80,.15);   color: #ef5350; }
+        .badge-other { background: rgba(139,148,158,.15); color: #8b949e; }
+        .mono { font-family: var(--mono); }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Optimized Momentum Strategy Results</h1>
+
+        <!-- ─── Page header ─── -->
+        <div class="page-header">
+            <h1>🚀 Momentum Sniper — Backtest Results</h1>
+            <p class="subtitle">Optimized RSI + EMA-${trendPeriod} Strategy &middot; Auto-generated report</p>
+        </div>
+
+        <!-- ─── README / GitHub overview panel ─── -->
+        <div class="readme-panel">
+            <div class="readme-header">
+                <span>📄</span>
+                <span class="rh-title">README.md</span>
+                <span style="margin-left:auto;font-size:.75rem">trading-bots / README.md</span>
+            </div>
+            <div class="readme-body" id="readmeBody"></div>
+        </div>
+
+        <!-- ─── Performance stats ─── -->
+        <p class="section-title">📊 Performance Summary</p>
         <div class="summary">
             ${Object.entries(bot.summary())
               .map(
                 ([k, v]) => `
                 <div class="stat-card">
                     <div class="stat-label">${k.toUpperCase().replace(/_/g, " ")}</div>
-                    <div class="stat-value" style="color: white">${v}</div>
-                </div>
-            `,
+                    <div class="stat-value" style="color:${statColor(k, String(v))}">${v}</div>
+                </div>`,
               )
               .join("")}
         </div>
 
+        <!-- ─── Candlestick chart ─── -->
         <div class="chart-container">
-            <h2>Price, EMA ${trendPeriod} & Stop Loss</h2>
+            <h2>📈 Price Action · EMA-${trendPeriod} &amp; Stop Loss</h2>
             <div id="candleChart"></div>
         </div>
 
+        <!-- ─── Trade history ─── -->
         <div class="chart-container">
-            <h2>Trade History</h2>
+            <h2>📋 Trade History</h2>
             <table>
                 <thead>
-                    <tr><th>Time</th><th>Side</th><th>Entry</th><th>Exit</th><th>Reason</th><th>Hold</th><th>PnL (%)</th></tr>
+                    <tr>
+                        <th>#</th><th>Entry Time</th><th>Side</th>
+                        <th>Entry $</th><th>Exit $</th>
+                        <th>Outcome</th><th>Hold</th><th>PnL</th>
+                    </tr>
                 </thead>
                 <tbody>
                     ${tradeRows
                       .map(
-                        (t) => `
+                        (t, i) => `
                         <tr>
+                            <td class="mono" style="color:var(--muted)">${i + 1}</td>
                             <td>${t.time}</td>
-                            <td style="color: ${t.side === "LONG" ? "#58a6ff" : "#ffa657"}">${t.side}</td>
-                            <td>${t.entryPrice}</td>
-                            <td>${t.exitPrice}</td>
-                            <td>${t.exitReason}</td>
-                            <td>${t.hodlTime}</td>
-                            <td style="color: ${t.pnlColor}">${t.pnl}</td>
-                        </tr>
-                    `,
+                            <td><span class="badge badge-${t.side === "LONG" ? "long" : "short"}">${t.side}</span></td>
+                            <td class="mono">${t.entryPrice}</td>
+                            <td class="mono">${t.exitPrice}</td>
+                            <td><span class="badge badge-${t.exitReason === "TP" ? "tp" : t.exitReason === "SL" ? "sl" : "other"}">${t.exitReason}</span></td>
+                            <td style="color:var(--muted)">${t.hodlTime}</td>
+                            <td class="mono" style="color:${t.pnlColor}">${t.pnl}</td>
+                        </tr>`,
                       )
                       .join("")}
                 </tbody>
             </table>
         </div>
 
+        <!-- ─── Equity curve ─── -->
         <div class="chart-container">
-            <h2>Equity Curve</h2>
+            <h2>📈 Equity Curve</h2>
             <canvas id="equityChart"></canvas>
         </div>
     </div>
 
     <script>
+        // ── Render README markdown ──────────────────────────────────────────
+        const readmeMd = ${JSON.stringify(readmeMd)};
+        document.getElementById('readmeBody').innerHTML = marked.parse(readmeMd);
+
+        // ── Charts ─────────────────────────────────────────────────────────
         document.addEventListener('DOMContentLoaded', () => {
             const chartOptions = {
                 layout: { background: { color: '#161b22' }, textColor: '#d1d4dc' },
@@ -258,12 +458,13 @@ export class HtmlReportGenerator implements IReportGenerator {
             emaSeries.setData(${JSON.stringify(emaData)});
 
             const slSeries = chart.addLineSeries({
-                color: '#ef5350', lineWidth: 2, lineStyle: LightweightCharts.LineStyle.Dotted, title: 'Stop Loss', priceLineVisible: false,
+                color: '#ef5350', lineWidth: 2,
+                lineStyle: LightweightCharts.LineStyle.Dotted,
+                title: 'Stop Loss', priceLineVisible: false,
             });
             slSeries.setData(${JSON.stringify(slCurveData)});
 
             candleSeries.setMarkers(${JSON.stringify(markers)});
-
             chart.timeScale().fitContent();
 
             new Chart(document.getElementById('equityChart'), {
@@ -271,17 +472,24 @@ export class HtmlReportGenerator implements IReportGenerator {
                 data: {
                     labels: ${JSON.stringify(downsampledEquityLabels)},
                     datasets: [{
-                        label: 'Equity',
+                        label: 'Equity ($)',
                         data: ${JSON.stringify(downsampledEquity)},
-                        borderColor: '#3fb950', fill: true, backgroundColor: 'rgba(63, 185, 80, 0.1)', tension: 0.1
+                        borderColor: '#3fb950',
+                        fill: true,
+                        backgroundColor: 'rgba(63,185,80,0.08)',
+                        tension: 0.3,
+                        pointRadius: 0,
                     }]
                 },
                 options: {
                     responsive: true,
-                    plugins: { legend: { display: false } },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { mode: 'index', intersect: false }
+                    },
                     scales: {
                         y: { grid: { color: '#30363d' }, ticks: { color: '#8b949e' } },
-                        x: { grid: { color: '#30363d' }, ticks: { color: '#8b949e' } }
+                        x: { grid: { color: '#30363d' }, ticks: { color: '#8b949e', maxTicksLimit: 12 } }
                     }
                 }
             });

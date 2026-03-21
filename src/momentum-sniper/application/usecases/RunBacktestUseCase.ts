@@ -19,7 +19,7 @@ export class RunBacktestUseCase {
     console.log("=".repeat(60));
 
     const symbol = bot.symbol;
-    const df = await this.marketDataProvider.getHistoricalData(
+    let df = await this.marketDataProvider.getHistoricalData(
       symbol,
       timeframe,
       1000,
@@ -31,6 +31,21 @@ export class RunBacktestUseCase {
       return;
     }
 
+    // FIX #6: Filter out incomplete candles to avoid lookahead bias
+    const now = Date.now();
+    const tfMs = this._parseTimeframe(timeframe);
+    const originalCount = df.length;
+    df = df.filter(row => row.timestamp + tfMs <= now);
+    
+    if (df.length < originalCount) {
+      console.log(`  Filtered out ${originalCount - df.length} incomplete candle(s).`);
+    }
+
+    if (df.length === 0) {
+      console.log("No completed candles available.");
+      return;
+    }
+
     const startDate = new Date(df[0].timestamp).toLocaleDateString();
     const endDate = new Date(df[df.length - 1].timestamp).toLocaleDateString();
 
@@ -38,10 +53,7 @@ export class RunBacktestUseCase {
     console.log(`  Total rows : ${df.length}`);
 
     const config = bot.get_config();
-    // FIX #2: derive the history cap from the configured trend_period so that
-    // MomentumBot's guard (`closes_history.length < trend_period`) can always
-    // be satisfied. A buffer of 50 extra candles is added on top to give
-    // RSI and other secondary indicators enough look-back room.
+    // ... rest of the setup
     const HISTORY_BUFFER = 50;
     const historyCap = Math.max(
       (config.trend_period ?? 200) + HISTORY_BUFFER,
@@ -54,11 +66,9 @@ export class RunBacktestUseCase {
     const lows: number[] = [];
 
     console.log(`\n  Running backtest on ${df.length} candles...`);
+
     for (const row of df) {
       // FIX #3: push history AFTER calling on_candle so that closes_history
-      // contains only prior (confirmed) candles. The bot receives the current
-      // bar's OHLC through the dedicated parameters and must not derive
-      // current_close from the tail of closes_history.
       bot.on_candle(
         row.timestamp,
         row.open,
@@ -105,5 +115,24 @@ export class RunBacktestUseCase {
     // file has been fully written and errors are not silently swallowed.
     await this.reportGenerator.generateReport(df, bot, outputPath);
     console.log("\nDone.");
+  }
+
+  private _parseTimeframe(tf: string): number {
+    const unit = tf.slice(-1);
+    const val = parseInt(tf.slice(0, -1));
+    switch (unit) {
+      case "m":
+        return val * 60 * 1000;
+      case "h":
+        return val * 60 * 60 * 1000;
+      case "d":
+        return val * 24 * 60 * 60 * 1000;
+      case "w":
+        return val * 7 * 24 * 60 * 60 * 1000;
+      case "M":
+        return val * 30 * 24 * 60 * 60 * 1000;
+      default:
+        return 60 * 60 * 1000; // 1h default
+    }
   }
 }
