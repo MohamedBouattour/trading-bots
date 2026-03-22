@@ -153,53 +153,74 @@ export class HtmlReportGenerator implements IReportGenerator {
       downsampledEquity.push(equity[i]);
     }
 
-    // ── README content (kept in sync with repo README.md) ──────────────────
+    // ── Build inline summary table from bot.summary() ──────────────────────
+    const summaryEntries = Object.entries(bot.summary());
+    const summaryTableRows = summaryEntries
+      .map(
+        ([k, v]) => `| **${k.replace(/_/g, " ").toUpperCase()}** | \`${v}\` |`,
+      )
+      .join("\n");
+
+    // config stores pct values already as numbers like 1.5 (= 1.5%), 6.0 (= 6%)
+    const slPct = (config.stop_loss_pct ?? 1.5).toFixed(1);
+    const tpPct = (config.take_profit_pct ?? 6.0).toFixed(1);
+    const rr = (
+      (config.take_profit_pct ?? 6.0) / (config.stop_loss_pct ?? 1.5)
+    ).toFixed(1);
+
     const readmeMd = `
-# Momentum Sniper Trading Bot
+# Momentum Sniper — BTC/USDT · 4H Backtest Report
 
-An advanced **One-Shot** momentum trading bot for cryptocurrency spot markets (Binance).
+> Auto-generated report — strategy: **RSI + EMA-${trendPeriod} Trend Filter** · pair: **BTC/USDT** · timeframe: **4H**
 
-## 🚀 Key Features
-- **One-Shot Execution**: Concentrates capital on high-probability signals.
-- **Trend-Following**: Aligns entries with long-term market momentum (EMA ${trendPeriod}).
-- **Multiple Strategies**: Includes implementations for Pullbacks, Crossovers, and Mean Reversion.
-- **Dynamic Risk Management**: Integrated Stop Loss, Take Profit, and Trailing Stop.
-- **Backtesting & Optimization**: Built-in tools to verify and fine-tune parameters using historical data.
-- **State Persistence**: Saves bot state between cron runs to maintain continuity.
+---
 
-## 📁 Directory Structure
-\`\`\`
-src/
-├── momentum-sniper/    # Main bot module
-│   ├── application/    # Use cases (Backtest logic)
-│   ├── domain/         # Core bot logic (MomentumBot)
-│   ├── infrastructure/ # External services (Binance, Market Data, Reporting)
-│   ├── ports/          # Interfaces
-│   └── presentation/   # CLI entry points
-├── models/             # Shared data models (Position, Order, BotConfig)
-└── shared/             # Common utilities and indicators
-\`\`\`
+## 📊 Backtest Results
 
-## 🛠 Setup
-1. Clone the repository.
-2. Install dependencies: \`npm install\`.
-3. Create a \`.env\` file based on \`.env.example\`.
-4. Run a backtest: \`npm run backtest\`.
+| Metric | Value |
+|--------|-------|
+${summaryTableRows}
 
-## 📈 Strategy — Entry Conditions
+---
+
+## 🤖 How the Strategy Works
+
+The bot scans 4-hour candles and enters a trade only when **both** a momentum signal and a trend filter agree.
 
 ### ▲ LONG Entry
-1. Price is **above** EMA-${trendPeriod} (uptrend confirmed).
-2. RSI crosses **above 50** (momentum shift to bullish).
-3. Fresh crossover only — previous candle RSI must have been ≤ 50.
+1. Close price is **above** EMA-${trendPeriod} → uptrend confirmed.
+2. RSI(14) **crosses above 50** on this candle (was ≤ 50 on the previous candle).
+3. Entry at the **next candle open**.
 
 ### ▼ SHORT Entry
-1. Price is **below** EMA-${trendPeriod} (downtrend confirmed).
-2. RSI crosses **below 50** (momentum shift to bearish).
-3. Fresh crossover only — previous candle RSI must have been ≥ 50.
+1. Close price is **below** EMA-${trendPeriod} → downtrend confirmed.
+2. RSI(14) **crosses below 50** on this candle (was ≥ 50 on the previous candle).
+3. Entry at the **next candle open**.
 
-## ⚖️ License
-ISC
+---
+
+## 🛡 Risk Management
+
+| Parameter | Value |
+|-----------|-------|
+| Stop Loss | **${slPct}%** per trade |
+| Take Profit | **${tpPct}%** per trade |
+| Risk / Reward | **1 : ${rr}** |
+| Position Sizing | Fixed % account risk per trade |
+| Max Open Positions | **1** (one trade at a time) |
+
+> At a **1:${rr} R/R ratio**, the strategy is profitable above a ~${Math.ceil(100 / (parseFloat(rr) + 1))}% win rate.
+
+---
+
+## 📈 Chart Guide
+
+| Marker | Meaning |
+|--------|---------|
+| ▲ Green arrow (below bar) | LONG entry or LONG exit |
+| ▼ Red arrow (above bar) | SHORT entry or SHORT exit |
+| Orange line | EMA-${trendPeriod} (trend filter) |
+| Red dotted line | Active Stop Loss level |
 `;
 
     // ── Stat card colour helper ───────────────────────────────────────────

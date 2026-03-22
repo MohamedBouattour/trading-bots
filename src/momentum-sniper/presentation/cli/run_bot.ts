@@ -114,7 +114,7 @@ async function main() {
   const strategyName = (process.env.STRATEGY || "rsi_sma").toLowerCase();
 
   // 3. Load State
-  let state: Record<string, any> | null = null;
+  let state: Record<string, unknown> | null = null;
   let bot: IBot;
 
   const createBot = (type: string, config: BotConfig): IBot => {
@@ -202,7 +202,10 @@ async function main() {
       const assetSymbol = symbol.split("/")[0];
       if (useFutures) {
         const positions = await executor.getFuturesPositions();
-        const pos = positions.find((p: any) => p.symbol === symbolNormalized);
+        const pos = positions.find(
+          (p: { symbol: string; positionAmt: string }) =>
+            p.symbol === symbolNormalized,
+        );
         if (pos) {
           realAssetQty = Math.abs(parseFloat(pos.positionAmt));
           log(
@@ -246,13 +249,14 @@ async function main() {
         }
       }
       log("✅ SYNC: Account data synchronized.");
-    } catch (e: any) {
-      log(`⚠️ WARNING: Could not sync with Binance API: ${e.message}`);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      log(`⚠️ WARNING: Could not sync with Binance API: ${msg}`);
     }
   }
 
   // 5. Run Strategy Logic
-  if (!state || state.last_processed_candle !== lastCandleTime) {
+  if (!state || (state.last_processed_candle as number) !== lastCandleTime) {
     if (realAssetQty > 0.0001 && bot.positions.length === 0) {
       log(
         `🛑 SKIP: Ongoing position found on Binance (${realAssetQty}) that is NOT tracked by bot state. Doing nothing to avoid conflicts.`,
@@ -332,26 +336,34 @@ async function main() {
   }
 
   // 6. Final Portfolio Summary
-  const assetValue = realAssetQty * currentPrice;
-  const floatingBalance = realUsdtBalance + assetValue;
+  // For futures: the position value is notional (qty × price), but only the
+  // margin (notional / leverage) is actually drawn from the account balance.
+  // For spot: leverage is always 1, so division has no effect.
+  const notionalValue = realAssetQty * currentPrice;
+  const positionMargin = notionalValue / leverage; // margin locked
+  const floatingBalance = realUsdtBalance + positionMargin;
   const totalRoi =
     ((floatingBalance - bot.initial_balance) / bot.initial_balance) * 100;
 
+  const marginNote =
+    useFutures && leverage > 1
+      ? ` (notional: $${notionalValue.toFixed(2)} @ ${leverage}x)`
+      : "";
   log(
-    `💹 WALLET: ROI: ${totalRoi.toFixed(2)}% | Floating Bal: ${floatingBalance.toFixed(2)} USDT`,
+    `💹 WALLET: ROI: ${totalRoi.toFixed(2)}% | Floating Bal: ${floatingBalance.toFixed(2)} USDT${marginNote}`,
   );
   log(`   ├─ Cash (USDT): ${realUsdtBalance.toFixed(2)}`);
   log(
-    `   └─ Asset (${symbol.split("/")[0]}): ${realAssetQty.toFixed(4)} ($${assetValue.toFixed(2)})`,
+    `   └─ Asset (${symbol.split("/")[0]}): ${realAssetQty.toFixed(4)} ($${notionalValue.toFixed(2)})`,
   );
 
   log("✅ SUCCESS: Execution finished.");
 
   if (
     "gc" in global &&
-    typeof (global as Record<string, any>).gc === "function"
+    typeof (global as Record<string, unknown>).gc === "function"
   ) {
-    (global as Record<string, any>).gc();
+    (global as unknown as Record<string, () => void>).gc();
   }
 }
 
