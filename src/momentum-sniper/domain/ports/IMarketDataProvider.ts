@@ -1,4 +1,4 @@
-import { Candle } from "../../models/Candle";
+import { Candle } from "../../../shared/domain/models/Candle";
 
 export interface IMarketDataProvider {
   getHistoricalData(

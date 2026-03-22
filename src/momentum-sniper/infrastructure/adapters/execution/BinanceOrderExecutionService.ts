@@ -4,7 +4,7 @@ import Binance, {
   OrderType,
   TimeInForce,
 } from "binance-api-node";
-import { IOrderExecutor } from "../../ports/IOrderExecutor";
+import { IOrderExecutor } from "../../../domain/ports/IOrderExecutor";
 
 interface BinanceFilter {
   filterType: string;

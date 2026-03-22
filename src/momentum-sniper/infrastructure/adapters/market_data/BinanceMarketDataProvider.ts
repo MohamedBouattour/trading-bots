@@ -1,6 +1,6 @@
 import axios from "axios";
-import { Candle } from "../../../models/Candle";
-import { IMarketDataProvider } from "../../ports/IMarketDataProvider";
+import { Candle } from "../../../../shared/domain/models/Candle";
+import { IMarketDataProvider } from "../../../domain/ports/IMarketDataProvider";
 
 export class BinanceMarketDataProvider implements IMarketDataProvider {
   private readonly BINANCE_SPOT_URL = "https://api.binance.com/api/v3/klines";

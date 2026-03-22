@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as Papa from "papaparse";
-import { Candle } from "../../../models/Candle";
-import { IMarketDataProvider } from "../../ports/IMarketDataProvider";
+import { Candle } from "../../../../shared/domain/models/Candle";
+import { IMarketDataProvider } from "../../../domain/ports/IMarketDataProvider";
 
 export class LocalCsvMarketDataProvider implements IMarketDataProvider {
   constructor(private csvPath: string) {}

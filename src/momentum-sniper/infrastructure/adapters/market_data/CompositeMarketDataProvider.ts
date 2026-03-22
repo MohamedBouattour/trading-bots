@@ -1,5 +1,5 @@
-import { Candle } from "../../../models/Candle";
-import { IMarketDataProvider } from "../../ports/IMarketDataProvider";
+import { Candle } from "../../../../shared/domain/models/Candle";
+import { IMarketDataProvider } from "../../../domain/ports/IMarketDataProvider";
 import { LocalCsvMarketDataProvider } from "./LocalCsvMarketDataProvider";
 import { BinanceMarketDataProvider } from "./BinanceMarketDataProvider";
 import { SyntheticMarketDataProvider } from "./SyntheticMarketDataProvider";

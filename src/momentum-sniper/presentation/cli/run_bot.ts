@@ -1,12 +1,12 @@
 import * as dotenv from "dotenv";
 import * as path from "path";
 import * as fs from "fs";
-import { BinanceMarketDataProvider } from "../../infrastructure/market_data/BinanceMarketDataProvider";
-import { BinanceOrderExecutionService } from "../../infrastructure/execution/BinanceOrderExecutionService";
+import { BinanceMarketDataProvider } from "../../infrastructure/adapters/market_data/BinanceMarketDataProvider";
+import { BinanceOrderExecutionService } from "../../infrastructure/adapters/execution/BinanceOrderExecutionService";
 import { RsiEmaTrendBot } from "../../domain/bot/RsiEmaTrendBot";
 import { IBot } from "../../domain/bot/IBot";
-import { BotConfig } from "../../../models/BotConfig";
-import { IndicatorService } from "../../../shared/indicators/IndicatorService";
+import { BotConfig } from "../../domain/models/BotConfig";
+import { IndicatorService } from "../../../shared/domain/services/IndicatorService";
 
 // 1. SILENCE ALL WARNINGS (Must be at the very top)
 process.env.NODE_NO_WARNINGS = "1";

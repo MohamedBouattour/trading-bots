@@ -1,5 +1,5 @@
-import { IMarketDataProvider } from "../../ports/IMarketDataProvider";
-import { IReportGenerator } from "../../ports/IReportGenerator";
+import { IMarketDataProvider } from "../../domain/ports/IMarketDataProvider";
+import { IReportGenerator } from "../../domain/ports/IReportGenerator";
 import { IBot } from "../../domain/bot/IBot";
 
 export class RunBacktestUseCase {

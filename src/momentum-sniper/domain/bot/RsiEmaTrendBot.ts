@@ -1,7 +1,7 @@
 import { BaseStrategyBot } from "./StrategyBots";
-import { BotConfig } from "../../../models/BotConfig";
-import { RsiEmaTrendStrategy, OHLCV } from "../strategies/RsiEmaTrendStrategy";
-import { IndicatorService } from "../../../shared/indicators/IndicatorService";
+import { BotConfig } from "../models/BotConfig";
+import { RsiEmaTrendStrategy, OHLCV } from "../strategy/RsiEmaTrendStrategy";
+import { IndicatorService } from "../../../shared/domain/services/IndicatorService";
 
 /**
  * Bot implementing the Optimized RSI + EMA Trend Follower Strategy.

@@ -1,8 +1,8 @@
 import * as fs from "fs";
-import { Candle } from "../../../models/Candle";
-import { IBot } from "../../domain/bot/IBot";
-import { IReportGenerator } from "../../ports/IReportGenerator";
-import { IndicatorService } from "../../../shared/indicators/IndicatorService";
+import { Candle } from "../../../../shared/domain/models/Candle";
+import { IBot } from "../../../domain/bot/IBot";
+import { IReportGenerator } from "../../../domain/ports/IReportGenerator";
+import { IndicatorService } from "../../../../shared/domain/services/IndicatorService";
 
 export class HtmlReportGenerator implements IReportGenerator {
   generateReport(df: Candle[], bot: IBot, outputPath: string): void {

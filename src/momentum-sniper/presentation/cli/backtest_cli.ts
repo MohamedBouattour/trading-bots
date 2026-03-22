@@ -1,13 +1,13 @@
 import * as dotenv from "dotenv";
 import { RunBacktestUseCase } from "../../application/usecases/RunBacktestUseCase";
-import { BinanceMarketDataProvider } from "../../infrastructure/market_data/BinanceMarketDataProvider";
-import { LocalCsvMarketDataProvider } from "../../infrastructure/market_data/LocalCsvMarketDataProvider";
-import { SyntheticMarketDataProvider } from "../../infrastructure/market_data/SyntheticMarketDataProvider";
-import { CompositeMarketDataProvider } from "../../infrastructure/market_data/CompositeMarketDataProvider";
-import { HtmlReportGenerator } from "../../infrastructure/reporting/HtmlReportGenerator";
+import { BinanceMarketDataProvider } from "../../infrastructure/adapters/market_data/BinanceMarketDataProvider";
+import { LocalCsvMarketDataProvider } from "../../infrastructure/adapters/market_data/LocalCsvMarketDataProvider";
+import { SyntheticMarketDataProvider } from "../../infrastructure/adapters/market_data/SyntheticMarketDataProvider";
+import { CompositeMarketDataProvider } from "../../infrastructure/adapters/market_data/CompositeMarketDataProvider";
+import { HtmlReportGenerator } from "../../infrastructure/adapters/reporting/HtmlReportGenerator";
 // Removed other bots to stick to the single RSI+EMA strategy on 4H BTCUSDT
 import { RsiEmaTrendBot } from "../../domain/bot/RsiEmaTrendBot";
-import { BotConfig } from "../../../models/BotConfig";
+import { BotConfig } from "../../domain/models/BotConfig";
 import { IBot } from "../../domain/bot/IBot";
 
 dotenv.config();

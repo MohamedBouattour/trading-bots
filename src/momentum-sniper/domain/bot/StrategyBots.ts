@@ -1,7 +1,7 @@
-import { Order } from "../../../models/Order";
-import { Position } from "../../../models/Position";
-import { Trade } from "../../../models/Trade";
-import { BotConfig } from "../../../models/BotConfig";
+import { Order } from "../models/Order";
+import { Position } from "../models/Position";
+import { Trade } from "../models/Trade";
+import { BotConfig } from "../models/BotConfig";
 import { IBot, BotSummary } from "./IBot";
 
 export abstract class BaseStrategyBot implements IBot {

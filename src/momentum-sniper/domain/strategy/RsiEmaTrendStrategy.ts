@@ -1,4 +1,4 @@
-import { IndicatorService } from "../../../shared/indicators/IndicatorService";
+import { IndicatorService } from "../../../shared/domain/services/IndicatorService";
 
 export type SignalSide = "LONG" | "SHORT" | "NONE";
 

@@ -1,4 +1,4 @@
-import { MathUtils } from "../utils/MathUtils";
+import { MathUtils } from "../../utils/MathUtils";
 
 export class IndicatorService {
   static computeATR(closes: number[], period: number = 14): number {

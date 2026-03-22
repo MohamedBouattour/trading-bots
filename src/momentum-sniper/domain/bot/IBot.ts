@@ -1,7 +1,7 @@
-import { BotConfig } from "../../../models/BotConfig";
-import { Position } from "../../../models/Position";
-import { Trade } from "../../../models/Trade";
-import { Order } from "../../../models/Order";
+import { BotConfig } from "../models/BotConfig";
+import { Position } from "../models/Position";
+import { Trade } from "../models/Trade";
+import { Order } from "../models/Order";
 
 export interface BotSummary {
   period: string;
