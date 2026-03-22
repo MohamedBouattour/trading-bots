@@ -68,6 +68,53 @@ export class IndicatorService {
     return 100 - 100 / (1 + rs);
   }
 
+  static computeWilderRSISeries(data: number[], period: number): number[] {
+    const result: number[] = [];
+    if (data.length < period + 1) {
+      return data.map(() => 50);
+    }
+    let avgGain = 0;
+    let avgLoss = 0;
+    for (let i = 1; i <= period; i++) {
+      const diff = data[i] - data[i - 1];
+      if (diff >= 0) avgGain += diff;
+      else avgLoss -= diff;
+    }
+    avgGain /= period;
+    avgLoss /= period;
+
+    for (let i = 0; i <= period; i++) result.push(50);
+    result.push(avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss));
+
+    for (let i = period + 1; i < data.length; i++) {
+      const diff = data[i] - data[i - 1];
+      avgGain = (avgGain * (period - 1) + (diff >= 0 ? diff : 0)) / period;
+      avgLoss = (avgLoss * (period - 1) + (diff < 0 ? -diff : 0)) / period;
+      result.push(avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss));
+    }
+    return result;
+  }
+
+  static computeWilderRSI(data: number[], period: number = 14): number {
+    if (data.length < period + 1) return 50;
+    let avgGain = 0;
+    let avgLoss = 0;
+    for (let i = 1; i <= period; i++) {
+      const diff = data[i] - data[i - 1];
+      if (diff >= 0) avgGain += diff;
+      else avgLoss -= diff;
+    }
+    avgGain /= period;
+    avgLoss /= period;
+    for (let i = period + 1; i < data.length; i++) {
+      const diff = data[i] - data[i - 1];
+      avgGain = (avgGain * (period - 1) + (diff >= 0 ? diff : 0)) / period;
+      avgLoss = (avgLoss * (period - 1) + (diff < 0 ? -diff : 0)) / period;
+    }
+    if (avgLoss === 0) return 100;
+    return 100 - 100 / (1 + avgGain / avgLoss);
+  }
+
   static computeBollingerBands(
     data: number[],
     period: number = 20,

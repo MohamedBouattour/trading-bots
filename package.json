@@ -6,10 +6,6 @@
   "scripts": {
     "build": "esbuild src/momentum-sniper/presentation/cli/run_bot.ts --bundle --platform=node --outfile=dist/momentum-sniper.js",
     "backtest": "ts-node src/momentum-sniper/presentation/cli/backtest_cli.ts",
-    "batch-backtest": "ts-node src/momentum-sniper/presentation/cli/batch_backtest_cli.ts",
-    "optimize": "ts-node src/momentum-sniper/presentation/cli/optimize_cli.ts",
-    "optimize-roi": "ts-node src/momentum-sniper/presentation/cli/optimize_max_roi_cli.ts",
-    "open-order": "ts-node src/momentum-sniper/presentation/cli/open_order_cli.ts",
     "test": "vitest run"
   },
   "keywords": [],

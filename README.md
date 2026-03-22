@@ -31,7 +31,7 @@ src/
 
 ## 📈 Performance Summary (Example)
 The **Momentum Sniper** (SMA 5/10 Breakout) achieved:
-- **ROI**: High variability based on market trend.
+- **ROI**: High variability based on market trend for BTC/USDT.
 - **Win Rate**: ~60% in trending markets.
 - **Timeframe**: Optimized for 1h cycles.
 

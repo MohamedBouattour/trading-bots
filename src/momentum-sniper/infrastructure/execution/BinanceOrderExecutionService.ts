@@ -152,8 +152,10 @@ export class BinanceOrderExecutionService implements IOrderExecutor {
       if (this.useFutures) {
         // Futures don't always support quoteOrderQty, some require quantity
         // Let's use quantity for futures by calculating from price
-        const prices = await this.client.prices();
-        const price = parseFloat(prices[symbol]);
+        const allPrices = await this.client.prices();
+        const priceData = allPrices.find((p: any) => p.symbol === symbol);
+        if (!priceData) throw new Error(`Price for ${symbol} not found.`);
+        const price = parseFloat(priceData.price);
         const { stepSize } = await this.getSymbolFilters(symbol);
         const quantity = this.roundByStep(quoteQty / price, stepSize);
 

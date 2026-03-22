@@ -3,16 +3,7 @@ import * as path from "path";
 import * as fs from "fs";
 import { BinanceMarketDataProvider } from "../../infrastructure/market_data/BinanceMarketDataProvider";
 import { BinanceOrderExecutionService } from "../../infrastructure/execution/BinanceOrderExecutionService";
-import { RsiSmaCrossoverBot } from "../../domain/bot/RsiSmaCrossoverBot";
 import { RsiEmaTrendBot } from "../../domain/bot/RsiEmaTrendBot";
-import {
-  TrendRiderBot,
-  FixedTargetBot,
-  DeepValueBot,
-  PullbackRiderBot,
-  VolatilitySwingBot,
-  StructuralGridBot,
-} from "../../domain/bot/StrategyBots";
 import { IBot } from "../../domain/bot/IBot";
 import { BotConfig } from "../../../models/BotConfig";
 import { IndicatorService } from "../../../shared/indicators/IndicatorService";
@@ -45,7 +36,7 @@ dotenv.config({ path: path.join(process.cwd(), ".env") });
 
 const apiKey = process.env.API_KEY || "";
 const apiSecret = process.env.SECRET_KEY || "";
-const symbol = (process.env.ASSET || "SOL/USDT").replace(/['"]/g, "");
+const symbol = (process.env.ASSET || "BTC/USDT").replace(/['"]/g, "");
 const symbolNormalized = symbol.replace("/", "");
 const timeframe = (process.env.TIME_FRAME || "4h").replace(/['"]/g, "");
 const STATE_FILE = path.join(
@@ -100,15 +91,17 @@ async function main() {
     symbol: symbolNormalized,
     initial_balance: parseFloat(process.env.BALANCE || "1000"),
     trend_period: parseInt(process.env.TREND_PERIOD || "100"),
-    take_profit_pct: parseFloat(process.env.TAKE_PROFIT || "12.0"),
-    stop_loss_pct: parseFloat(process.env.STOP_LOSS || "6.0"),
+    take_profit_pct: parseFloat(process.env.TAKE_PROFIT || "6.0"),
+    stop_loss_pct: parseFloat(process.env.STOP_LOSS || "1.5"),
     rsi_threshold: parseFloat(process.env.RSI_THRESHOLD || "45.0"),
-    rsi_period: parseInt(process.env.RSI_PERIOD || "14"),
-    rsi_sma_period: parseInt(process.env.RSI_SMA_PERIOD || "14"),
+    rsi_period: parseInt(process.env.RSI_PERIOD || "7"),
+    rsi_sma_period: parseInt(process.env.RSI_SMA_PERIOD || "7"),
     rsi_under_sma_duration: parseInt(process.env.RSI_UNDER_SMA_DURATION || "5"),
     max_exposure_pct: parseFloat(process.env.MAX_EXPOSURE || "100.0"),
     move_sl_to_be_at_pct: parseFloat(process.env.MOVE_SL_TO_BE_AT_PCT || "8.0"),
-    fee_pct: parseFloat(process.env.FEE_PCT || "0.1"),
+    fee_pct: parseFloat(process.env.FEE_PCT || "0.04"),
+    leverage: leverage,
+    use_futures: useFutures,
   };
 
   const strategyName = (process.env.STRATEGY || "rsi_sma").toLowerCase();
@@ -117,43 +110,17 @@ async function main() {
   let state: Record<string, unknown> | null = null;
   let bot: IBot;
 
-  const createBot = (type: string, config: BotConfig): IBot => {
-    switch (type) {
-      case "trend_rider":
-        return new TrendRiderBot(config);
-      case "fixed_target":
-        return new FixedTargetBot(config);
-      case "deep_value":
-        return new DeepValueBot(config);
-      case "pullback_rider":
-        return new PullbackRiderBot(config);
-      case "volatility_swing":
-        return new VolatilitySwingBot(config);
-      case "structural_grid":
-        return new StructuralGridBot(config);
-      case "rsi_ema_trend":
-        return new RsiEmaTrendBot(config);
-      default:
-        return new RsiSmaCrossoverBot(config);
-    }
-  };
-
   if (fs.existsSync(STATE_FILE)) {
     log(`📂 Loading existing state from ${STATE_FILE}`);
     state = JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
-    if (strategyName === "rsi_sma") {
-      bot = RsiSmaCrossoverBot.fromJSON(JSON.stringify(state), config);
-    } else {
-      bot = createBot(strategyName, config);
-      // For other bots, we might not have fromJSON, so we just initialize fresh or try to load state manually if needed
-    }
+    bot = RsiEmaTrendBot.fromJSON(JSON.stringify(state), config);
     (bot as unknown as { initial_balance: number }).initial_balance =
       config.initial_balance ?? 1000;
   } else {
     log(
       `📦 Initializing fresh state for strategy: ${strategyName} (Warmup)...`,
     );
-    bot = createBot(strategyName, config);
+    bot = new RsiEmaTrendBot(config);
     const closes = candles.map((c) => c.close);
     // Warm up indicators WITHOUT recording trades
     for (let i = 0; i < candles.length - 1; i++) {

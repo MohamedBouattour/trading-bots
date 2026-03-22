@@ -1,499 +1,435 @@
-# 🛠️ Fix Plan — AUDIT.md Bug Resolution
+# Fix Plan — RSI + 100 EMA Strategy Compliance & Bug Resolution
 
-> Generated: 2026-03-22
-> Based on: Code audit cross-referenced against source files
-
----
-
-## Verification Summary
-
-| #   | Audit Claim                                   | Verdict          | Real Bug?                     | Priority |
-| --- | --------------------------------------------- | ---------------- | ----------------------------- | -------- |
-| 1   | Leverage not applied in position sizing       | ✅ **CONFIRMED** | YES — Critical                | 🔴 P0    |
-| 2   | Fee on margin, not leveraged notional         | ✅ **CONFIRMED** | YES — Critical                | 🔴 P0    |
-| 3   | RSI SMA window too small for OB/OS lookback   | ⚠️ **PARTIALLY** | Edge case only                | 🟡 P2    |
-| 4   | RsiEmaTrendBot owns separate OHLCV history    | ✅ **CONFIRMED** | YES — By design but risky     | 🟠 P1    |
-| 5   | O(n²) RSI recalculation in strategy           | ✅ **CONFIRMED** | YES — Performance             | 🟠 P1    |
-| 6   | StructuralGrid over-allocates on grid entries | ⚠️ **PARTIALLY** | Minor — has `too_close` guard | 🟡 P2    |
-| 7   | FixedTargetBot TP1 skipped on TP2 candle      | ✅ **CONFIRMED** | YES — Logic bug               | 🟡 P2    |
-| 8   | RSI SMA vs Wilder smoothing drift             | ✅ **CONFIRMED** | YES — Accuracy divergence     | 🟡 P3    |
-| 9   | PullbackRider off-by-one EMA touch            | ✅ **CONFIRMED** | YES — History timing bug      | 🟠 P1    |
-| 10  | DeepValueBot RSI < 20 rarely triggers         | ❌ **NOT A BUG** | Design choice, not a bug      | ⚪ N/A   |
+> **Created:** 2026-03-22  
+> **Scope:** All open issues from `AUDIT.md` + spec compliance review  
+> **Target:** Align codebase with the 1-Year Backtest Report spec (RSI 7 + 100 EMA, BTC/USDT 4H, 5x leverage, 0.04% fee)
 
 ---
 
-## Detailed Bug Verification
+## Priority Legend
 
-### Bug 1 — Leverage Not Applied in Position Sizing ✅ CONFIRMED CRITICAL
+| Icon | Meaning                                                                  |
+| ---- | ------------------------------------------------------------------------ |
+| 🔴   | Critical — directly breaks live trading or causes wrong backtest results |
+| 🟠   | Medium — incorrect behavior under certain conditions                     |
+| 🟡   | Minor — cosmetic, documentation, or edge-case only                       |
 
-**Files:** `StrategyBots.ts` (line 87-89), `RsiSmaCrossoverBot.ts` (lines 241-243, 258-260), `BotConfig.ts`
+---
 
-**Evidence:**
+## 🔴 Fix 1 — `run_bot.ts`: Pass `leverage` and `use_futures` to bot config
+
+**Problem:** `run_bot.ts` reads `LEVERAGE` and `USE_FUTURES` from `.env` into local variables (lines 61-62) but **never passes them into the `config` object** (lines 99-112). The bot runs at 1x leverage in live mode regardless of `.env`.
+
+**File:** `src/momentum-sniper/presentation/cli/run_bot.ts`
+
+**Change:**
 
 ```typescript
-// StrategyBots.ts _open_position() — line 87-89
-const trade_allocation = this.initial_balance * (size_pct / 100);
-const spendable = Math.min(this.balance, trade_allocation) * 0.99;
-const qty = spendable / price;
+// ADD these two lines to the config object (after line 111):
+leverage:               parseFloat(process.env.LEVERAGE || "5"),
+use_futures:            process.env.USE_FUTURES === "true",
 ```
 
-- `BotConfig` has **no** `leverage` field.
-- `.env` sets `LEVERAGE=5` and `USE_FUTURES=true`, but **nothing reads these values** into the bot.
-- The constructor of `BaseStrategyBot` does not accept or store leverage.
-- All position sizing is calculated purely on `initial_balance * size_pct / 100` — pure spot 1x logic.
-
-**Verdict:** This is a **real, critical bug**. The backtest simulates spot trading even when configured for 5x futures.
+**Acceptance:** Bot constructor receives `leverage=5` and `use_futures=true` when those env vars are set.
 
 ---
 
-### Bug 2 — Fee Calculated on Margin, Not Leveraged Notional ✅ CONFIRMED CRITICAL
+## 🔴 Fix 2 — `run_bot.ts`: Align fallback defaults with spec
 
-**Files:** `StrategyBots.ts` (line 90-91), `RsiSmaCrossoverBot.ts` (lines 244-245, 261-262)
+**Problem:** Fallback defaults in `run_bot.ts` use old strategy values (TP 12%, SL 6%, RSI 14, RSI SMA 14, Fee 0.1%). If `.env` keys are ever missing, the bot silently uses wrong parameters.
 
-**Evidence:**
+**File:** `src/momentum-sniper/presentation/cli/run_bot.ts`
+
+**Changes (lines 101-111):**
 
 ```typescript
-// StrategyBots.ts _open_position() — line 90-91
-const cost = qty * price; // This IS the margin (not notional)
-const fee = (cost * this.fee_pct) / 100; // Fee on margin only
+// BEFORE → AFTER
+take_profit_pct:  parseFloat(process.env.TAKE_PROFIT || "12.0"),    → "6.0"
+stop_loss_pct:    parseFloat(process.env.STOP_LOSS   || "6.0"),     → "1.5"
+rsi_period:       parseInt(process.env.RSI_PERIOD    || "14"),      → "7"
+rsi_sma_period:   parseInt(process.env.RSI_SMA_PERIOD || "14"),     → "7"
+fee_pct:          parseFloat(process.env.FEE_PCT     || "0.1"),     → "0.04"
 ```
 
-- Since leverage isn't applied to qty (Bug 1), `cost` represents the margin, not the full contract notional.
-- On Binance Futures, fees are charged on `notional = margin × leverage`.
-- At 5x leverage, fees are **understated by 5x** in the backtest.
-
-**Verdict:** This is a **real, critical bug**. Directly follows from Bug 1 — once leverage is applied, fees must also be computed on the full notional.
+**Acceptance:** When `.env` is empty, `bot.get_config()` returns `{ take_profit_pct: 6.0, stop_loss_pct: 1.5, rsi_period: 7, rsi_sma_period: 7, fee_pct: 0.04 }`.
 
 ---
 
-### Bug 3 — RSI SMA Window Too Small for OB/OS Lookback ⚠️ PARTIALLY CONFIRMED
+## 🔴 Fix 3 — `backtest_cli.ts`: Align fallback defaults with spec
 
-**File:** `RsiSmaCrossoverBot.ts` (lines 107-109, 185)
+**Problem:** Same stale defaults issue as Fix 2, but in the backtest CLI.
 
-**Evidence:**
+**File:** `src/momentum-sniper/presentation/cli/backtest_cli.ts`
+
+**Changes (lines 37-46):**
 
 ```typescript
-// Line 107-109 — buffer cap
-if (this._rsi_history.length > this._rsi_sma_period * 2) {
-  this._rsi_history.shift();
+// BEFORE → AFTER
+fee_pct:          parseFloat(process.env.FEE_PCT     || "0.1"),     → "0.04"
+```
+
+The other defaults in `backtest_cli.ts` are already correct (TP 6.0, SL 1.5, RSI 7, RSI SMA 7).
+
+**Acceptance:** Backtest uses 0.04% fee when `FEE_PCT` env var is absent.
+
+---
+
+## 🔴 Fix 4 — Double entry-fee deduction in PnL calculation
+
+**Problem:** Entry fee is charged **twice** — once at position open (`_open_position` deducts `margin + fee` from balance) and again at position close (`_market_sell` subtracts `fee_entry` from PnL). This understates profits by one entry fee per trade.
+
+**Files:**
+
+- `src/momentum-sniper/domain/bot/StrategyBots.ts` → `BaseStrategyBot._market_sell()` (line 130)
+- `src/momentum-sniper/domain/bot/RsiSmaCrossoverBot.ts` → `_close_position()` (line 296)
+
+**Change in `StrategyBots.ts` (line 126-131):**
+
+```typescript
+// BEFORE:
+const fee_entry = (notional_entry * this.fee_pct) / 100;
+const pnl =
+  pos.side === "LONG"
+    ? notional_exit - notional_entry - fee_exit - fee_entry
+    : notional_entry - notional_exit - fee_exit - fee_entry;
+
+// AFTER: Remove fee_entry from PnL since it was already deducted at open
+const pnl =
+  pos.side === "LONG"
+    ? notional_exit - notional_entry - fee_exit
+    : notional_entry - notional_exit - fee_exit;
+```
+
+**Same change in `RsiSmaCrossoverBot.ts` (lines 291-299):**
+
+```typescript
+// BEFORE:
+const fee_entry = (notional_entry * this.fee_pct) / 100;
+let pnl: number;
+if (pos.side === "LONG") {
+  pnl = notional_exit - notional_entry - fee_exit - fee_entry;
+} else {
+  pnl = notional_entry - notional_exit - fee_exit - fee_entry;
 }
 
-// Line 185 — lookback slice
-const lookback = this._rsi_history.slice(-this._rsi_ob_os_lookback);
-```
-
-- Default: `rsi_sma_period = 14`, cap = `14 * 2 = 28`. Lookback = `5`.
-- With 28 entries and a lookback of 5, the lookback slice is always satisfied.
-- **However**, with a small `rsi_sma_period` (e.g., 7, cap = 14), and during warmup when the buffer has fewer than `rsi_ob_os_lookback` entries, the `slice` could return fewer than 5 values — but `Array.some()` still works correctly on shorter arrays.
-
-**Verdict:** **Edge case only**, not a showstopper. The buffer could be tighter, but functionally it works for current default configs. Worth a **minor fix** to make the cap explicitly `Math.max(rsi_sma_period * 2, rsi_ob_os_lookback + rsi_sma_period)`.
-
----
-
-### Bug 4 — RsiEmaTrendBot Owns Separate OHLCV History ✅ CONFIRMED
-
-**File:** `RsiEmaTrendBot.ts` (lines 42, 51-54)
-
-**Evidence:**
-
-```typescript
-// Line 42 — parameter named _closes_history (prefixed underscore = explicitly ignored!)
-_closes_history: number[],
-
-// Line 51-54 — builds its own history from individual candle args
-this._ohlcvHistory.push({ timestamp, open, high, low, close, volume });
-if (this._ohlcvHistory.length > this._historyLimit) {
-  this._ohlcvHistory.shift();
-}
-```
-
-- The bot **intentionally ignores** the `closes_history` passed by `RunBacktestUseCase`.
-- It builds its own `_ohlcvHistory` from individual candle data.
-- `_historyLimit = trend_period + 50` (default: 150) vs `RunBacktestUseCase`'s `historyCap = max(trend_period + 50, 300)` — **different limits**.
-- The EMA is computed over the bot's internal history, which caps at 150 candles, while a 100-period EMA needs ~200+ candles for stable convergence.
-
-**Verdict:** **Real bug.** The history is too short for reliable EMA-100 warmup, and it diverges from the standardized history provided by the backtest harness.
-
----
-
-### Bug 5 — O(n²) RSI Recalculation in Strategy ✅ CONFIRMED
-
-**File:** `RsiEmaTrendStrategy.ts` (lines 79-85)
-
-**Evidence:**
-
-```typescript
-const minRequired = this.RSI_SMA_PERIOD + this.CONFIRMATION_LOOKBACK + 1;
-// Default: 7 + 5 + 1 = 13
-for (let i = ohlcvData.length - minRequired; i < ohlcvData.length; i++) {
-  rsiValues.push(
-    IndicatorService.computeRSI(closes.slice(0, i + 1), this.RSI_PERIOD),
-  );
+// AFTER: Remove fee_entry line entirely, remove fee_entry from PnL
+let pnl: number;
+if (pos.side === "LONG") {
+  pnl = notional_exit - notional_entry - fee_exit;
+} else {
+  pnl = notional_entry - notional_exit - fee_exit;
 }
 ```
 
-- Each `computeRSI()` call operates on `closes.slice(0, i+1)` — potentially the **entire** closes array.
-- With default `minRequired = 13`, this creates **13 full RSI computations per candle**.
-- For a 2000-candle backtest, that's `13 × 2000 = 26,000` RSI calculations, each iterating up to 2000 values.
-- Additionally, the RSI implementation uses SMA (not Wilder's smoothing), so each call from a different starting point yields **slightly different results** vs an incremental approach.
-
-**Verdict:** **Real performance bug.** While it doesn't produce incorrect signals per se (each RSI is internally consistent), it's ~13x slower than necessary and the SMA-based RSI means values shift depending on the window start.
+**Acceptance:** Running a backtest with a single known trade should show PnL = `(exit_notional - entry_notional - exit_fee)` with no duplicate entry fee.
 
 ---
 
-### Bug 6 — StructuralGrid Over-Allocates on Grid Entries ⚠️ PARTIALLY CONFIRMED
+## 🔴 Fix 5 — `RsiSmaCrossoverBot`: RSI SMA period fallback should be 7, not 14
 
-**File:** `StrategyBots.ts` (lines 603-626)
+**Problem:** `RsiSmaCrossoverBot.ts:71` defaults to `14` when config is missing.
 
-**Evidence:**
+**File:** `src/momentum-sniper/domain/bot/RsiSmaCrossoverBot.ts`
+
+**Change (line 71):**
 
 ```typescript
-// Line 603 — allows up to 3 positions
-if (this.positions.length < 3) {
-  // Line 613-615 — has a "too_close" guard
-  const too_close = this.positions.some(
-    (p) => Math.abs(p.entry_price - close) / p.entry_price < 0.05,
-  );
-  if (!too_close) {
-    this._market_buy(close, timestamp, 0, close * 1.2, 30, "STRUCTURAL_DROP");
+// BEFORE:
+this._rsi_sma_period = config.rsi_sma_period ?? 14;
+// AFTER:
+this._rsi_sma_period = config.rsi_sma_period ?? 7;
+```
+
+**Acceptance:** `new RsiSmaCrossoverBot({ symbol: 'BTCUSDT', initial_balance: 1000 })` uses `_rsi_sma_period = 7`.
+
+---
+
+## 🔴 Fix 6 — `.env` STRATEGY value: clarify which bot matches the spec
+
+**Problem:** `.env` currently sets `STRATEGY=rsi_sma_crossover`, which selects `RsiSmaCrossoverBot`. This bot has an **extra condition not in the spec**: it requires RSI to have been below SMA for `rsi_under_sma_duration` (5) **consecutive candles** before a crossover signal fires. The spec only requires RSI to have been below 40 at any point in the last 5 candles.
+
+**Decision required:** There are two options:
+
+### Option A — Remove the duration filter from `RsiSmaCrossoverBot` _(recommended)_
+
+Remove the `_rsi_under_sma_counter >= _rsi_under_sma_duration` check from lines 205 and 212 in `RsiSmaCrossoverBot.ts`. This makes it match the spec exactly. Keep using `STRATEGY=rsi_sma_crossover` in `.env`.
+
+### Option B — Switch `.env` to `STRATEGY=rsi_ema_trend`
+
+Set `STRATEGY=rsi_ema_trend` in `.env` to use `RsiEmaTrendBot`, which delegates to `RsiEmaTrendStrategy` and **does not** have the duration filter. This already conforms to the spec signal logic.
+
+**Recommendation:** **Option A**, because `RsiSmaCrossoverBot` is the more mature implementation (has state serialization, `fromJSON`, trailing stop, trend reversal exit). Removing one filter line is less risky than switching bots entirely.
+
+**Change for Option A — `RsiSmaCrossoverBot.ts` (lines 200-212):**
+
+```typescript
+// BEFORE:
+const long_signal =
+  crossed_above &&
+  close > emaTrend &&
+  was_oversold &&
+  this._rsi_under_sma_counter >= this._rsi_under_sma_duration;
+
+const short_signal =
+  crossed_below &&
+  close < emaTrend &&
+  was_overbought &&
+  this._rsi_above_sma_counter >= this._rsi_above_sma_duration;
+
+// AFTER:
+const long_signal = crossed_above && close > emaTrend && was_oversold;
+
+const short_signal = crossed_below && close < emaTrend && was_overbought;
+```
+
+**Acceptance:** Backtest trade count and win rate should now more closely match spec (77 trades, 25.97% win rate).
+
+---
+
+## 🟠 Fix 7 — RSI SMA history buffer too small for OB/OS lookback
+
+**Problem:** `RsiSmaCrossoverBot` caps `_rsi_history` at `rsi_sma_period * 2` (=14 for period 7). But `rsi_ob_os_lookback` (5) is sliced from this same buffer. If OB/OS lookback + SMA period exceeds the buffer cap, the lookback window is truncated.
+
+**File:** `src/momentum-sniper/domain/bot/RsiSmaCrossoverBot.ts`
+
+**Change (lines 114-120):**
+
+```typescript
+// BEFORE:
+const bufferCap = Math.max(
+  this._rsi_sma_period * 2,
+  this._rsi_ob_os_lookback + this._rsi_sma_period + 1,
+);
+
+// This is actually already fixed in the current code. Verify the condition holds:
+// bufferCap = max(14, 5 + 7 + 1) = max(14, 13) = 14 → OK for current params
+// But add a safety margin:
+const bufferCap = Math.max(
+  this._rsi_sma_period * 3,
+  this._rsi_ob_os_lookback + this._rsi_sma_period + 5,
+);
+```
+
+**Acceptance:** `_rsi_history` always has enough elements for both SMA computation and lookback slicing.
+
+---
+
+## 🟠 Fix 8 — `RsiEmaTrendBot` builds independent OHLCV history
+
+**Problem:** `RsiEmaTrendBot.on_candle()` ignores the `closes_history` array passed by `RunBacktestUseCase` and maintains its own `_ohlcvHistory`. The history limit is `trend_period * 2 + 50` (250 for EMA-100), which is adequate, but the bot runs on a fundamentally different data pipeline than all other bots.
+
+**File:** `src/momentum-sniper/domain/bot/RsiEmaTrendBot.ts`
+
+**Change:** This is by design since `RsiEmaTrendStrategy.checkSignal()` needs full OHLCV data (not just closes). No code change needed, but add a comment documenting this intentional divergence:
+
+```typescript
+// NOTE: This bot maintains its own OHLCV history because RsiEmaTrendStrategy
+// requires full OHLCV candles, not just closes. The closes_history parameter
+// from the backtest runner is not used. The _historyLimit ensures enough data
+// for EMA warmup (trend_period * 2 + 50 = 250 candles for EMA-100).
+```
+
+**Acceptance:** Comment added. No behavioral change.
+
+---
+
+## 🟠 Fix 9 — `RsiEmaTrendStrategy` O(n²) RSI recalculation
+
+**Problem:** `checkSignal()` calls `computeWilderRSI(rsiWindow.slice(0, i+1))` in a loop for `minRequired` iterations. Each call processes the full slice. This is O(n²).
+
+**File:** `src/momentum-sniper/domain/strategies/RsiEmaTrendStrategy.ts`
+
+**Change:** Pre-compute RSI incrementally using a single pass:
+
+```typescript
+// Replace the loop (lines 86-90) with a single computeWilderRSI call
+// that returns the full RSI series, then slice the last minRequired values.
+// This requires adding a computeWilderRSISeries method to IndicatorService.
+```
+
+**New method in `src/shared/indicators/IndicatorService.ts`:**
+
+```typescript
+static computeWilderRSISeries(data: number[], period: number): number[] {
+  const result: number[] = [];
+  if (data.length < period + 1) {
+    return data.map(() => 50);
   }
-}
-```
-
-- The `_open_position` method (line 87-93):
-  ```
-  trade_allocation = initial_balance * (30 / 100) = 0.30 * initial_balance
-  spendable = Math.min(this.balance, trade_allocation) * 0.99
-  ```
-- After entry 1: balance ≈ `initial_balance * 0.70`. Entry 2 tries to spend `initial_balance * 0.30` but `Math.min(0.70 * IB, 0.30 * IB) = 0.30 * IB` — still works.
-- After entry 2: balance ≈ `initial_balance * 0.40`. Entry 3 tries `0.30 * IB`, and `Math.min(0.40 * IB, 0.30 * IB) = 0.30 * IB` — still works.
-- After entry 3: balance ≈ `initial_balance * 0.10` — correctly leaves 10% reserve.
-- The `cost + fee > this.balance` guard prevents overdraft.
-
-**Verdict:** **Partially a bug.** The sizing is slightly inconsistent (each entry ignores the capital already allocated), but in practice the `Math.min` and overdraft guard prevent catastrophic failure. The 3 × 30% = 90% total is **by design**. The audit's claim of "inconsistent sizing" is fair but the actual risk is low. Worth a cleanup to use `balance`-based allocation instead.
-
----
-
-### Bug 7 — FixedTargetBot TP2 Can Fire Before TP1 ✅ CONFIRMED
-
-**File:** `StrategyBots.ts` (lines 303-318)
-
-**Evidence:**
-
-```typescript
-} else if (high >= pos.entry_price * 1.24) {
-  this._market_sell(pos, pos.entry_price * 1.24, "TP2 (24%)", timestamp);
-} else if (
-  high >= pos.entry_price * 1.16 &&
-  !(pos.meta as any)?.tp1_hit
-) {
-  this._market_sell(pos, pos.entry_price * 1.16, "TP1 (16%)", timestamp, pos.quantity * 0.5);
-  if (pos.meta) (pos.meta as any).tp1_hit = true;
-}
-```
-
-- If a candle's `high` jumps past `1.24 × entry` in one bar, the **entire position** is sold at TP2.
-- TP1 (partial exit at 16%) is **never executed** — the user misses the staged exit.
-- The `tp1_hit` flag is never set in the TP2 path, creating dead state.
-
-**Verdict:** **Real logic bug.** On gap candles, the intended 50/50 staged exit is completely bypassed. Fix: check TP1 first, or handle both TPs on the same candle.
-
----
-
-### Bug 8 — RSI SMA vs Wilder Smoothing Drift ✅ CONFIRMED (Minor)
-
-**File:** `IndicatorService.ts` (lines 54-69)
-
-**Evidence:**
-
-```typescript
-static computeRSI(data: number[], period: number = 14): number {
-  // Uses simple average over the last `period` changes
-  const slice = data.slice(-(period + 1));
-  let gains = 0;
-  let losses = 0;
-  for (let i = 1; i < slice.length; i++) {
-    const diff = slice[i] - slice[i - 1];
-    if (diff >= 0) gains += diff;
-    else losses -= diff;
+  let avgGain = 0, avgLoss = 0;
+  for (let i = 1; i <= period; i++) {
+    const diff = data[i] - data[i - 1];
+    if (diff >= 0) avgGain += diff;
+    else avgLoss -= diff;
   }
-  const rs = gains / period / (losses / period);
-  return 100 - 100 / (1 + rs);
+  avgGain /= period;
+  avgLoss /= period;
+  // Fill warmup period with 50
+  for (let i = 0; i <= period; i++) result.push(50);
+  result.push(avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss));
+
+  for (let i = period + 1; i < data.length; i++) {
+    const diff = data[i] - data[i - 1];
+    avgGain = (avgGain * (period - 1) + (diff >= 0 ? diff : 0)) / period;
+    avgLoss = (avgLoss * (period - 1) + (diff < 0 ? -diff : 0)) / period;
+    result.push(avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss));
+  }
+  return result;
 }
 ```
 
-- This is **Cutler's RSI** (SMA-based), not **Wilder's RSI** (EMA-based) used by TradingView.
-- For consistency with the platform the bot trades against, Wilder's smoothing (`prevAvg * (period-1) + current) / period`) would be more appropriate.
-- The divergence is most significant in the first 50-100 candles, potentially shifting crossover signals.
+**Then update `RsiEmaTrendStrategy.checkSignal()` (lines 80-90):**
 
-**Verdict:** **Real but minor.** The bot's signals are internally consistent, but they will differ from TradingView charts. Low priority unless the goal is to match TV signals exactly.
+```typescript
+const allRsi = IndicatorService.computeWilderRSISeries(closes, this.RSI_PERIOD);
+const rsiValues = allRsi.slice(-minRequired);
+```
+
+**Acceptance:** Same RSI values produced, but O(n) instead of O(n²). Verify by comparing backtest output before and after.
 
 ---
 
-### Bug 9 — PullbackRider Off-by-One EMA Touch ✅ CONFIRMED
+## 🟠 Fix 10 — `FixedTargetBot`: TP2 can fire before TP1
 
-**File:** `StrategyBots.ts` (lines 472-473)
+**Problem:** On a candle where `high >= entry * 1.24`, the entire position is sold at TP2 without TP1 ever firing. The `tp1_hit` flag is never set.
 
-**Evidence:**
+**File:** `src/momentum-sniper/domain/bot/StrategyBots.ts` (lines 316-329)
+
+**Change:** Reorder to check TP1 first:
 
 ```typescript
+// BEFORE: TP1 is checked first (confirmed lines 316-329 show TP1 then TP2)
+// Actually re-reading the code, TP1 IS checked first (line 316) and TP2 second (line 327).
+// The AUDIT.md description was based on an older version. Current code is correct.
+// Verify current order and confirm no change needed.
+```
+
+**Acceptance:** If the current code already checks TP1 before TP2 (which it does at lines 316-329), no change. Mark as resolved.
+
+---
+
+## 🟠 Fix 11 — `StructuralGridBot` over-allocates on grid entries
+
+**Problem:** Grid entries attempt 33% of `initial_balance` each, but after entry 1, `balance` has dropped while allocation is still based on `initial_balance`.
+
+**File:** `src/momentum-sniper/domain/bot/StrategyBots.ts` (lines 631-639)
+
+**Change:** The current code already has dynamic sizing logic:
+
+```typescript
+const size_pct_dynamic =
+  remainingSlots > 0
+    ? Math.min(
+        33.33,
+        ((this.balance / this.initial_balance) * 100) / remainingSlots,
+      )
+    : 0;
+```
+
+This caps allocation to available balance. The `Math.min(this.balance, trade_allocation)` in `_open_position` also guards against overdraft. **No change needed** — current code is already safe.
+
+**Acceptance:** Mark as resolved.
+
+---
+
+## 🟡 Fix 12 — Update `STRATEGY.md` to match spec
+
+**Problem:** `STRATEGY.md` still describes the old RSI Pullback strategy.
+
+**File:** `src/momentum-sniper/STRATEGY.md`
+
+**Change:** Replace entire contents with the current spec:
+
+- EMA 100, RSI 7, RSI SMA 7
+- Oversold 40, Overbought 60, Lookback 5
+- SL 1.5%, TP 6.0%
+- LONG + SHORT signals
+- Leverage 5x, Fee 0.04%
+
+**Acceptance:** `STRATEGY.md` documents the exact strategy spec from the backtest report.
+
+---
+
+## 🟡 Fix 13 — Update `.env.example` to match spec
+
+**Problem:** `.env.example` shows old grid strategy defaults (TP 0.8, SL 2.0, etc.)
+
+**File:** `.env.example`
+
+**Change:** Replace with current spec-aligned defaults:
+
+```env
+API_KEY=your_binance_api_key
+SECRET_KEY=your_binance_secret_key
+ASSET='BTC/USDT'
+TIME_FRAME='4h'
+BALANCE=10000
+LEVERAGE=5
+USE_FUTURES=true
+FEE_PCT=0.04
+STRATEGY=rsi_sma_crossover
+MONTHS=12
+
+# Optimized RSI + 100 EMA Strategy Parameters
+RSI_PERIOD=7
+RSI_SMA_PERIOD=7
+TREND_PERIOD=100
+STOP_LOSS=1.5
+TAKE_PROFIT=6.0
+RSI_UNDER_SMA_DURATION=5
+MAX_EXPOSURE=100
+MAX_DD_EXIT=10.0
+MOVE_SL_TO_BE_AT_PCT=0.0
+EXIT_ON_TREND_REVERSAL=false
+TRAILING_STOP=0.0
+```
+
+**Acceptance:** `.env.example` matches the spec and serves as correct documentation.
+
+---
+
+## 🟡 Fix 14 — `PullbackRiderBot` off-by-one in EMA touch detection
+
+**Problem:** `previous_close` is `closes_history[closes_history.length - 1]` which is actually the prior candle's close (since `RunBacktestUseCase` pushes after `on_candle`). This is correct behavior per the current backtest runner, but fragile.
+
+**File:** `src/momentum-sniper/domain/bot/StrategyBots.ts` (line 486)
+
+**Change:** Add a clarifying comment. No code change needed since the backtest runner's push-after-on_candle pattern makes this work correctly:
+
+```typescript
+// closes_history contains all candles BEFORE the current one (pushed after on_candle).
+// So closes_history[length-1] is the previous candle's close, which is correct.
 const previous_close = closes_history[closes_history.length - 1];
-const touched_21 = low <= ema21 && previous_close > ema21;
 ```
 
-- `RunBacktestUseCase` passes `[...closes]` (prior closes, **not including the current candle's close**) as `closes_history`.
-- So `closes_history[closes_history.length - 1]` is the **previous candle's close** — this is actually **correct** for checking "was above EMA last candle".
-- **However**, the `ema21` is computed from `closes_history`, which also does not include the current close. The EMA should ideally include the current close for comparison with the current candle's `low`.
-- The comparison `low <= ema21` uses the current candle's low against an EMA computed without the current close — creating a **1-candle lag** on the EMA value.
-
-**Verdict:** **Confirmed subtle bug.** The EMA is computed on data that excludes the current candle, while `low` is the current candle's value. The mismatch means the touch detection compares current price data against a lagged EMA, potentially missing or generating false pullback signals.
+**Acceptance:** Comment added. No behavioral change.
 
 ---
 
-### Bug 10 — DeepValueBot RSI < 20 Threshold Rarely Triggers ❌ NOT A BUG
+## Execution Order
 
-**File:** `StrategyBots.ts` (lines 397-398)
+| Phase                                     | Fixes                                    | Risk                             | Est. Time |
+| ----------------------------------------- | ---------------------------------------- | -------------------------------- | --------- |
+| **Phase 1** — Critical live trading fixes | #1, #2, #3, #5                           | Low (config changes only)        | 15 min    |
+| **Phase 2** — PnL accuracy                | #4 (double fee)                          | Medium (changes trade results)   | 15 min    |
+| **Phase 3** — Strategy alignment          | #6 (duration filter removal)             | High (changes signal generation) | 20 min    |
+| **Phase 4** — Performance & robustness    | #7, #9 (RSI buffer, O(n²) fix)           | Medium                           | 30 min    |
+| **Phase 5** — Documentation               | #8, #12, #13, #14                        | None                             | 15 min    |
+| **Phase 6** — Verification                | Re-run backtest, compare metrics to spec | —                                | 10 min    |
 
-**Evidence:**
+### Post-Fix Verification
 
-```typescript
-const oversold = rsi < 20;
-const low_price = close < sma50 * 0.85; // 15% below SMA
+After all fixes, run:
+
+```bash
+npx tsx src/momentum-sniper/presentation/cli/backtest_cli.ts
 ```
 
-- RSI < 20 combined with 15% below SMA50 is intentionally an **extreme** deep-value filter.
-- The strategy is **named** "Deep Value" — its entire design philosophy is to buy at extreme lows.
-- Firing 1-3 times per year on BTC/4H is exactly the intended behavior for this type of strategy.
+Expected output should approximate the spec:
 
-**Verdict:** **Not a bug — it's a design choice.** The strategy works as intended. If more trades are desired, the thresholds should be relaxed at the strategy level, not treated as a code defect.
+- **ROI:** ~64.53%
+- **Total Trades:** ~77
+- **Win Rate:** ~25.97%
+- **Initial Balance:** 10,000 USDT (if BALANCE updated)
+- **Final Value:** ~16,452.67 USDT
 
----
-
-## Fix Tasks (Ordered by Priority)
-
-### 🔴 P0 — Critical Fixes (Must-Do)
-
-#### Task 1: Add Leverage Support to BotConfig and Position Sizing
-
-**Files to modify:**
-
-1. `src/models/BotConfig.ts` — Add `leverage?: number` and `use_futures?: boolean` fields
-2. `src/momentum-sniper/domain/bot/StrategyBots.ts` —
-   - Store `leverage` in `BaseStrategyBot` constructor (default `1`)
-   - In `_open_position()`: multiply `qty` by `leverage` to get leveraged quantity
-   - Adjust equity calculation in `_update_equity()` to account for leveraged PnL
-3. `src/momentum-sniper/domain/bot/RsiSmaCrossoverBot.ts` —
-   - Read `leverage` from config
-   - Apply in `_open_long()` and `_open_short()`: `qty = (spendable / price) * leverage`
-4. `src/momentum-sniper/presentation/cli/backtest_cli.ts` — Read `LEVERAGE` and `USE_FUTURES` from `.env` and pass into `BotConfig`
-
-**Implementation notes:**
-
-- Margin = `spendable / price` (the actual capital locked)
-- Quantity = margin-based qty × leverage (the notional position size)
-- PnL should be calculated on the **leveraged** quantity
-- Add liquidation check: if unrealized loss exceeds margin, force-close
-
-#### Task 2: Fix Fee Calculation for Leveraged Notional
-
-**Files to modify:**
-
-1. `src/momentum-sniper/domain/bot/StrategyBots.ts` — In `_open_position()` and `_market_sell()`:
-   ```
-   const notional = qty * price;  // qty already includes leverage from Task 1
-   const fee = (notional * this.fee_pct) / 100;
-   ```
-2. `src/momentum-sniper/domain/bot/RsiSmaCrossoverBot.ts` — Same pattern in `_open_long()`, `_open_short()`, `_close_position()`
-
-**Implementation notes:**
-
-- Once Task 1 applies leverage to qty, the fee automatically becomes correct if calculated on `qty * price`
-- For Binance Futures: maker fee = 0.02%, taker fee = 0.05% (current code uses 0.1% which is spot fee)
-- Consider making `fee_pct` configurable per market type
-
----
-
-### 🟠 P1 — Important Fixes
-
-#### Task 3: Fix RsiEmaTrendBot History Divergence
-
-**File to modify:** `src/momentum-sniper/domain/bot/RsiEmaTrendBot.ts`
-
-**Changes:**
-
-1. Increase `_historyLimit` to `Math.max((config.trend_period ?? 100) * 2 + 50, 300)` for proper EMA warmup
-2. Consider using the `closes_history` from `RunBacktestUseCase` as the primary data source instead of building independent OHLCV history
-3. If the separate history is needed for OHLCV data (which contains more than just closes), ensure the limit aligns with the backtest harness's `historyCap`
-
-#### Task 4: Optimize RSI Calculation in RsiEmaTrendStrategy (O(n²) → O(n))
-
-**File to modify:** `src/momentum-sniper/domain/strategies/RsiEmaTrendStrategy.ts`
-
-**Changes:**
-
-1. Replace the loop-based RSI recalculation with a single-pass incremental approach:
-   ```typescript
-   // Instead of: 13 separate computeRSI(closes.slice(0, i+1)) calls
-   // Use: compute RSI once on the full closes, then use a sliding window
-   const currentRsi = IndicatorService.computeRSI(closes, this.RSI_PERIOD);
-   ```
-2. For RSI SMA, maintain a rolling buffer of RSI values per candle instead of recomputing from scratch
-3. Alternatively, add `computeRSIHistory()` to `IndicatorService` that returns an array of RSI values in a single pass
-
-#### Task 5: Fix PullbackRider Off-by-One EMA Touch Detection
-
-**File to modify:** `src/momentum-sniper/domain/bot/StrategyBots.ts` (PullbackRiderBot, lines 470-478)
-
-**Changes:**
-
-1. Compute `ema21` using the full close history **including** the current close:
-   ```typescript
-   const closes_with_current = [...closes_history, close];
-   const ema21 = IndicatorService.computeEMA(closes_with_current, 21);
-   ```
-2. Keep `previous_close = closes_history[closes_history.length - 1]` as-is (correctly references prior candle)
-
----
-
-### 🟡 P2 — Minor Fixes
-
-#### Task 6: Fix RSI SMA Buffer Cap in RsiSmaCrossoverBot
-
-**File to modify:** `src/momentum-sniper/domain/bot/RsiSmaCrossoverBot.ts` (lines 107-109)
-
-**Changes:**
-
-```typescript
-// Replace:
-if (this._rsi_history.length > this._rsi_sma_period * 2) {
-// With:
-const bufferCap = Math.max(this._rsi_sma_period * 2, this._rsi_ob_os_lookback + this._rsi_sma_period + 1);
-if (this._rsi_history.length > bufferCap) {
-```
-
-#### Task 7: Fix FixedTargetBot TP1/TP2 Order
-
-**File to modify:** `src/momentum-sniper/domain/bot/StrategyBots.ts` (FixedTargetBot, lines 300-318)
-
-**Changes:**
-
-1. Check TP1 **before** TP2, or handle both on the same candle:
-
-```typescript
-for (const pos of pos_copy) {
-  if (low <= pos.stop_loss_price) {
-    this._market_sell(pos, pos.stop_loss_price, "SL", timestamp);
-  } else if (high >= pos.entry_price * 1.16 && !(pos.meta as any)?.tp1_hit) {
-    // TP1: sell half at 16%
-    this._market_sell(
-      pos,
-      pos.entry_price * 1.16,
-      "TP1 (16%)",
-      timestamp,
-      pos.quantity * 0.5,
-    );
-    if (pos.meta) (pos.meta as any).tp1_hit = true;
-    // Check if the same candle also hits TP2
-    if (high >= pos.entry_price * 1.24) {
-      this._market_sell(pos, pos.entry_price * 1.24, "TP2 (24%)", timestamp);
-    }
-  } else if (high >= pos.entry_price * 1.24 && (pos.meta as any)?.tp1_hit) {
-    // TP2: sell remaining
-    this._market_sell(pos, pos.entry_price * 1.24, "TP2 (24%)", timestamp);
-  }
-}
-```
-
-#### Task 8: Fix StructuralGridBot Sizing Consistency
-
-**File to modify:** `src/momentum-sniper/domain/bot/StrategyBots.ts` (StructuralGridBot, line 617-624)
-
-**Changes:**
-
-- Replace `size_pct = 30` with balance-based allocation:
-  ```typescript
-  const per_grid_allocation = Math.floor(
-    this.balance / (3 - this.positions.length),
-  );
-  const size_pct_dynamic = (per_grid_allocation / this.initial_balance) * 100;
-  this._market_buy(
-    close,
-    timestamp,
-    0,
-    close * 1.2,
-    size_pct_dynamic,
-    "STRUCTURAL_DROP",
-  );
-  ```
-
----
-
-### 🟡 P3 — Low Priority / Enhancement
-
-#### Task 9: Implement Wilder's RSI Smoothing (Optional)
-
-**File to modify:** `src/shared/indicators/IndicatorService.ts`
-
-**Changes:**
-
-1. Add `computeWilderRSI()` method using exponential smoothing:
-   ```typescript
-   static computeWilderRSI(data: number[], period: number = 14): number {
-     if (data.length < period + 1) return 50;
-     let avgGain = 0, avgLoss = 0;
-     // Initial SMA seed
-     for (let i = 1; i <= period; i++) {
-       const diff = data[i] - data[i - 1];
-       if (diff >= 0) avgGain += diff;
-       else avgLoss -= diff;
-     }
-     avgGain /= period;
-     avgLoss /= period;
-     // Wilder's smoothing
-     for (let i = period + 1; i < data.length; i++) {
-       const diff = data[i] - data[i - 1];
-       avgGain = (avgGain * (period - 1) + (diff >= 0 ? diff : 0)) / period;
-       avgLoss = (avgLoss * (period - 1) + (diff < 0 ? -diff : 0)) / period;
-     }
-     if (avgLoss === 0) return 100;
-     return 100 - 100 / (1 + avgGain / avgLoss);
-   }
-   ```
-2. Optionally make existing bots configurable to choose between SMA-RSI and Wilder-RSI
-
----
-
-## Implementation Order
-
-```
-Phase 1 (Critical — Backtest Accuracy)
-├── Task 1: Leverage in BotConfig + position sizing
-├── Task 2: Fee on leveraged notional
-└── Tests: Verify PnL matches manual calculation at 5x leverage
-
-Phase 2 (Important — Signal Quality)
-├── Task 3: RsiEmaTrendBot history alignment
-├── Task 4: RSI O(n²) optimization
-└── Task 5: PullbackRider EMA off-by-one
-
-Phase 3 (Cleanup — Edge Cases)
-├── Task 6: RSI SMA buffer cap
-├── Task 7: FixedTargetBot TP order
-└── Task 8: StructuralGrid sizing
-
-Phase 4 (Enhancement)
-└── Task 9: Wilder's RSI (optional)
-```
-
----
-
-## Not Addressed (No Action Needed)
-
-| Item                            | Reason                                                                 |
-| ------------------------------- | ---------------------------------------------------------------------- |
-| DeepValueBot RSI < 20 threshold | Design choice, not a bug. Strategy is intentionally ultra-conservative |
-| Win rate calculation            | ✅ Already fixed in current code                                       |
-| CSV month filtering             | ✅ Already fixed in current code                                       |
-| Lookahead bias                  | ✅ Already fixed in current code                                       |
-| Incomplete candle filtering     | ✅ Already fixed in current code                                       |
-| Unclosed position at end        | ✅ Already fixed in current code                                       |
+> ⚠️ Exact numbers may shift slightly after Fix #4 (double fee removal) and Fix #6 (duration filter removal), since both affect trade outcomes. A full re-backtest is required to establish the new baseline.

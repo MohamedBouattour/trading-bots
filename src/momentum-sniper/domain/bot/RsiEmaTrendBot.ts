@@ -18,18 +18,18 @@ export class RsiEmaTrendBot extends BaseStrategyBot {
 
     // Wire BotConfig → RsiEmaTrendStrategy so .env values are respected.
     this._strategy = new RsiEmaTrendStrategy({
-      emaPeriod:            config.trend_period       ?? 100,
-      rsiPeriod:            config.rsi_period         ?? 7,
-      rsiSmaPeriod:         config.rsi_sma_period     ?? 7,
-      oversoldThreshold:    (config as any).rsi_long_os_level   ?? 40,
-      overboughtThreshold:  (config as any).rsi_short_ob_level  ?? 60,
-      confirmationLookback: (config as any).rsi_ob_os_lookback  ?? 5,
-      slPct:                config.stop_loss_pct      ?? 1.5,
-      tpPct:                config.take_profit_pct    ?? 6.0,
+      emaPeriod: config.trend_period ?? 100,
+      rsiPeriod: config.rsi_period ?? 7,
+      rsiSmaPeriod: config.rsi_sma_period ?? 7,
+      oversoldThreshold: (config as any).rsi_long_os_level ?? 40,
+      overboughtThreshold: (config as any).rsi_short_ob_level ?? 60,
+      confirmationLookback: (config as any).rsi_ob_os_lookback ?? 5,
+      slPct: config.stop_loss_pct ?? 1.5,
+      tpPct: config.take_profit_pct ?? 6.0,
     });
 
     // Keep a window large enough for EMA warmup + RSI SMA + lookback buffer
-    this._historyLimit = Math.max((config.trend_period ?? 100) + 50, 200);
+    this._historyLimit = Math.max((config.trend_period ?? 100) * 2 + 50, 300);
   }
 
   public on_candle(
@@ -48,6 +48,10 @@ export class RsiEmaTrendBot extends BaseStrategyBot {
     if (this._start_timestamp === null) this._start_timestamp = timestamp;
     this._end_timestamp = timestamp;
 
+    // NOTE: This bot maintains its own OHLCV history because RsiEmaTrendStrategy
+    // requires full OHLCV candles, not just closes. The closes_history parameter
+    // from the backtest runner is not used. The _historyLimit ensures enough data
+    // for EMA warmup (trend_period * 2 + 50 = 250 candles for EMA-100).
     this._ohlcvHistory.push({ timestamp, open, high, low, close, volume });
     if (this._ohlcvHistory.length > this._historyLimit) {
       this._ohlcvHistory.shift();
@@ -61,30 +65,34 @@ export class RsiEmaTrendBot extends BaseStrategyBot {
 
       if (pos.side === "LONG") {
         if (low <= pos.stop_loss_price) {
-          exit_price  = pos.stop_loss_price;
+          exit_price = pos.stop_loss_price;
           exit_reason = "SL";
         } else if (high >= pos.take_profit_price) {
-          exit_price  = pos.take_profit_price;
+          exit_price = pos.take_profit_price;
           exit_reason = "TP";
         }
       } else {
         // SHORT
         if (high >= pos.stop_loss_price) {
-          exit_price  = pos.stop_loss_price;
+          exit_price = pos.stop_loss_price;
           exit_reason = "SL";
         } else if (low <= pos.take_profit_price) {
-          exit_price  = pos.take_profit_price;
+          exit_price = pos.take_profit_price;
           exit_reason = "TP";
         }
       }
 
       if (exit_reason) {
         this._market_sell(pos, exit_price, exit_reason, timestamp);
+        this._last_trade_candle = this._candle_counter;
       }
     }
 
     // ── 2. Entry Logic ────────────────────────────────────────────────────
-    if (this.positions.length === 0) {
+    if (
+      this.positions.length === 0 &&
+      this._last_trade_candle !== this._candle_counter
+    ) {
       const signalData = this._strategy.checkSignal(this._ohlcvHistory);
 
       if (signalData.signal === "LONG") {
@@ -97,6 +105,7 @@ export class RsiEmaTrendBot extends BaseStrategyBot {
           100,
           "RSI_EMA_LONG",
         );
+        this._last_trade_candle = this._candle_counter;
       } else if (signalData.signal === "SHORT") {
         this._open_position(
           "SHORT",
@@ -107,6 +116,7 @@ export class RsiEmaTrendBot extends BaseStrategyBot {
           100,
           "RSI_EMA_SHORT",
         );
+        this._last_trade_candle = this._candle_counter;
       }
     }
 
@@ -115,14 +125,31 @@ export class RsiEmaTrendBot extends BaseStrategyBot {
 
   public get_config(): BotConfig {
     return {
-      symbol:           this.symbol,
-      initial_balance:  this.initial_balance,
-      fee_pct:          this.fee_pct,
-      trend_period:     (this._strategy as any).EMA_PERIOD,
-      rsi_period:       (this._strategy as any).RSI_PERIOD,
-      rsi_sma_period:   (this._strategy as any).RSI_SMA_PERIOD,
-      stop_loss_pct:    (this._strategy as any).SL_PCT,
-      take_profit_pct:  (this._strategy as any).TP_PCT,
+      symbol: this.symbol,
+      initial_balance: this.initial_balance,
+      fee_pct: this.fee_pct,
+      trend_period: (this._strategy as any).EMA_PERIOD,
+      rsi_period: (this._strategy as any).RSI_PERIOD,
+      rsi_sma_period: (this._strategy as any).RSI_SMA_PERIOD,
+      stop_loss_pct: (this._strategy as any).SL_PCT,
+      take_profit_pct: (this._strategy as any).TP_PCT,
     };
+  }
+
+  public static fromJSON(jsonStr: string, config: BotConfig): RsiEmaTrendBot {
+    const raw = JSON.parse(jsonStr);
+    const bot = new RsiEmaTrendBot(config);
+    (bot as any).symbol = raw.symbol;
+    (bot as any).initial_balance = raw.initial_balance;
+    bot.balance = raw.balance;
+    bot.positions = raw.positions || [];
+    bot.equity_curve = raw.equity_curve || [];
+    bot.trade_log = raw.trade_log || [];
+    (bot as any)._peak_equity = raw.peak_equity || bot.initial_balance;
+    (bot as any)._candle_counter = raw.candle_counter || 0;
+    (bot as any)._start_timestamp = raw.start_timestamp || null;
+    (bot as any)._end_timestamp = raw.end_timestamp || null;
+    (bot as any)._ohlcvHistory = raw.ohlcv_history || [];
+    return bot;
   }
 }

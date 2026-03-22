@@ -28,10 +28,20 @@ export class HtmlReportGenerator implements IReportGenerator {
     const emaData: { time: number; value: number }[] = [];
     const slCurveData: { time: number; value: number }[] = [];
 
+    const rsiPeriod = config.rsi_period ?? 7;
+    const rsiSmaPeriod = config.rsi_sma_period ?? 7;
+    const allRsi = IndicatorService.computeWilderRSISeries(closes, rsiPeriod);
+    const rsiData: { time: number; value: number }[] = [];
+    const rsiSmaData: { time: number; value: number }[] = [];
+    const rsiRawValues: number[] = [];
+
     const offset = df.length - bot.sl_curve.length;
+    const historyLimit = Math.max(trendPeriod * 2 + 50, 300);
 
     for (let i = 0; i < df.length; i++) {
-      const window = closes.slice(0, i + 1);
+      // Create a visual window that mimics the bot's internal memory cap for accurate EMA lines
+      const windowStart = Math.max(0, i + 1 - historyLimit);
+      const window = closes.slice(windowStart, i + 1);
       const time = Math.floor(df[i].timestamp / 1000);
 
       if (window.length >= trendPeriod) {
@@ -39,6 +49,14 @@ export class HtmlReportGenerator implements IReportGenerator {
           time,
           value: IndicatorService.computeEMA(window, trendPeriod),
         });
+      }
+
+      rsiRawValues.push(allRsi[i]);
+      rsiData.push({ time, value: allRsi[i] });
+      if (i >= rsiSmaPeriod) {
+        const smaWind = rsiRawValues.slice(i - rsiSmaPeriod + 1, i + 1);
+        const smaVal = smaWind.reduce((a, b) => a + b, 0) / rsiSmaPeriod;
+        rsiSmaData.push({ time, value: smaVal });
       }
 
       const slIdx = i - offset;
@@ -169,9 +187,9 @@ export class HtmlReportGenerator implements IReportGenerator {
     ).toFixed(1);
 
     const readmeMd = `
-# Momentum Sniper — BTC/USDT · 4H Backtest Report
+# Momentum Sniper — ${config.symbol || "Asset"} Backtest Report
 
-> Auto-generated report — strategy: **RSI + EMA-${trendPeriod} Trend Filter** · pair: **BTC/USDT** · timeframe: **4H**
+> Auto-generated report — strategy: **RSI + EMA-${trendPeriod} Trend Filter** · pair: **${config.symbol || "Asset"}** · timeframe: **Backtest**
 
 ---
 
@@ -411,6 +429,7 @@ The bot scans 4-hour candles and enters a trade only when **both** a momentum si
         <div class="chart-container">
             <h2>📈 Price Action · EMA-${trendPeriod} &amp; Stop Loss</h2>
             <div id="candleChart"></div>
+            <div id="rsiChart" style="height: 220px; width: 100%; margin-top: 15px; border-top: 1px solid var(--border); padding-top: 15px;"></div>
         </div>
 
         <!-- ─── Trade history ─── -->
@@ -488,29 +507,76 @@ The bot scans 4-hour candles and enters a trade only when **both** a momentum si
             candleSeries.setMarkers(${JSON.stringify(markers)});
             chart.timeScale().fitContent();
 
-            new Chart(document.getElementById('equityChart'), {
+            // RSI Chart Setup
+            const rsiChartOptions = {
+                layout: { background: { color: 'transparent' }, textColor: '#d1d4dc' },
+                grid: { vertLines: { color: '#30363d' }, horzLines: { color: '#30363d' } },
+                timeScale: { visible: true, timeVisible: true, borderColor: '#30363d' },
+                rightPriceScale: { borderColor: '#30363d' },
+                crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+            };
+            const rsiChart = LightweightCharts.createChart(document.getElementById('rsiChart'), rsiChartOptions);
+            const rsiSeries = rsiChart.addLineSeries({ color: '#58a6ff', lineWidth: 2, title: 'RSI' });
+            rsiSeries.setData(${JSON.stringify(rsiData)});
+            const rsiSmaSeries = rsiChart.addLineSeries({ color: '#e3b341', lineWidth: 2, title: 'RSI SMA' });
+            rsiSmaSeries.setData(${JSON.stringify(rsiSmaData)});
+            
+            const obLine = { price: 60, color: '#ef5350', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dotted, axisLabelVisible: true, title: 'OB' };
+            const osLine = { price: 40, color: '#3fb950', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dotted, axisLabelVisible: true, title: 'OS' };
+            rsiSeries.createPriceLine(obLine);
+            rsiSeries.createPriceLine(osLine);
+
+            chart.timeScale().subscribeVisibleTimeRangeChange(range => { rsiChart.timeScale().setVisibleRange(range); });
+            rsiChart.timeScale().subscribeVisibleTimeRangeChange(range => { chart.timeScale().setVisibleRange(range); });
+
+            // Equity Curve Setup
+            const ctx = document.getElementById('equityChart').getContext('2d');
+            const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+            gradient.addColorStop(0, 'rgba(88, 166, 255, 0.4)');
+            gradient.addColorStop(1, 'rgba(88, 166, 255, 0.0)');
+
+            new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: ${JSON.stringify(downsampledEquityLabels)},
                     datasets: [{
                         label: 'Equity ($)',
                         data: ${JSON.stringify(downsampledEquity)},
-                        borderColor: '#3fb950',
+                        borderColor: '#58a6ff',
                         fill: true,
-                        backgroundColor: 'rgba(63,185,80,0.08)',
-                        tension: 0.3,
+                        backgroundColor: gradient,
+                        borderWidth: 2,
+                        tension: 0.4,
                         pointRadius: 0,
+                        pointHoverRadius: 6,
                     }]
                 },
                 options: {
                     responsive: true,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
                     plugins: {
                         legend: { display: false },
-                        tooltip: { mode: 'index', intersect: false }
+                        tooltip: { 
+                            backgroundColor: '#161b22', 
+                            titleColor: '#c9d1d9', 
+                            bodyColor: '#58a6ff',
+                            borderColor: '#30363d',
+                            borderWidth: 1,
+                            padding: 10
+                        }
                     },
                     scales: {
-                        y: { grid: { color: '#30363d' }, ticks: { color: '#8b949e' } },
-                        x: { grid: { color: '#30363d' }, ticks: { color: '#8b949e', maxTicksLimit: 12 } }
+                        y: { 
+                            grid: { color: '#30363d' }, 
+                            ticks: { color: '#8b949e', callback: function(value) { return '$' + value; } } 
+                        },
+                        x: { 
+                            grid: { color: 'transparent' }, 
+                            ticks: { color: '#8b949e', maxTicksLimit: 12 } 
+                        }
                     }
                 }
             });

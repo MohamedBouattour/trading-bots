@@ -19,14 +19,14 @@ export interface StrategySignal {
 }
 
 export interface RsiEmaTrendStrategyConfig {
-  emaPeriod?: number;          // default 100
-  rsiPeriod?: number;          // default 7
-  rsiSmaPeriod?: number;       // default 7
-  oversoldThreshold?: number;  // default 40
-  overboughtThreshold?: number;// default 60
+  emaPeriod?: number; // default 100
+  rsiPeriod?: number; // default 7
+  rsiSmaPeriod?: number; // default 7
+  oversoldThreshold?: number; // default 40
+  overboughtThreshold?: number; // default 60
   confirmationLookback?: number; // default 5
-  slPct?: number;              // default 1.5
-  tpPct?: number;              // default 6.0
+  slPct?: number; // default 1.5
+  tpPct?: number; // default 6.0
 }
 
 /**
@@ -45,14 +45,14 @@ export class RsiEmaTrendStrategy {
   private readonly TP_PCT: number;
 
   constructor(config: RsiEmaTrendStrategyConfig = {}) {
-    this.EMA_PERIOD           = config.emaPeriod           ?? 100;
-    this.RSI_PERIOD           = config.rsiPeriod           ?? 7;
-    this.RSI_SMA_PERIOD       = config.rsiSmaPeriod        ?? 7;
-    this.OVERSOLD_THRESHOLD   = config.oversoldThreshold   ?? 40;
+    this.EMA_PERIOD = config.emaPeriod ?? 100;
+    this.RSI_PERIOD = config.rsiPeriod ?? 7;
+    this.RSI_SMA_PERIOD = config.rsiSmaPeriod ?? 7;
+    this.OVERSOLD_THRESHOLD = config.oversoldThreshold ?? 40;
     this.OVERBOUGHT_THRESHOLD = config.overboughtThreshold ?? 60;
-    this.CONFIRMATION_LOOKBACK= config.confirmationLookback?? 5;
-    this.SL_PCT               = config.slPct               ?? 1.5;
-    this.TP_PCT               = config.tpPct               ?? 6.0;
+    this.CONFIRMATION_LOOKBACK = config.confirmationLookback ?? 5;
+    this.SL_PCT = config.slPct ?? 1.5;
+    this.TP_PCT = config.tpPct ?? 6.0;
   }
 
   public checkSignal(ohlcvData: OHLCV[]): StrategySignal {
@@ -78,21 +78,30 @@ export class RsiEmaTrendStrategy {
     // Build a rolling window of RSI values large enough for RSI SMA + lookback
     const minRequired = this.RSI_SMA_PERIOD + this.CONFIRMATION_LOOKBACK + 1;
     const rsiValues: number[] = [];
-    for (let i = ohlcvData.length - minRequired; i < ohlcvData.length; i++) {
-      rsiValues.push(
-        IndicatorService.computeRSI(closes.slice(0, i + 1), this.RSI_PERIOD),
-      );
-    }
 
-    const currentRsi  = rsiValues[rsiValues.length - 1];
-    const prevRsi     = rsiValues[rsiValues.length - 2];
+    // Compute RSI over the full available bot memory (up to historyLimit)
+    // This allows Wilder's smoothing to properly warm up and prevents indicator drift
+    const allRsi = IndicatorService.computeWilderRSISeries(
+      closes,
+      this.RSI_PERIOD,
+    );
+    rsiValues.push(...allRsi.slice(-minRequired));
 
-    const currentRsiSma  = IndicatorService.computeSMA(rsiValues, this.RSI_SMA_PERIOD);
+    const currentRsi = rsiValues[rsiValues.length - 1];
+    const prevRsi = rsiValues[rsiValues.length - 2];
+
+    const currentRsiSma = IndicatorService.computeSMA(
+      rsiValues,
+      this.RSI_SMA_PERIOD,
+    );
     const prevRsiHistory = rsiValues.slice(0, -1);
-    const prevRsiSma     = IndicatorService.computeSMA(prevRsiHistory, this.RSI_SMA_PERIOD);
+    const prevRsiSma = IndicatorService.computeSMA(
+      prevRsiHistory,
+      this.RSI_SMA_PERIOD,
+    );
 
-    const recentRsi   = rsiValues.slice(-this.CONFIRMATION_LOOKBACK);
-    const wasOversold   = recentRsi.some((v) => v < this.OVERSOLD_THRESHOLD);
+    const recentRsi = rsiValues.slice(-this.CONFIRMATION_LOOKBACK);
+    const wasOversold = recentRsi.some((v) => v < this.OVERSOLD_THRESHOLD);
     const wasOverbought = recentRsi.some((v) => v > this.OVERBOUGHT_THRESHOLD);
 
     // LONG: close > EMA, RSI crosses above its SMA, confirmed oversold recently
@@ -106,7 +115,7 @@ export class RsiEmaTrendStrategy {
       return {
         signal: "LONG",
         entryPrice: entry,
-        stopLossPrice:   entry * (1 - this.SL_PCT / 100),
+        stopLossPrice: entry * (1 - this.SL_PCT / 100),
         takeProfitPrice: entry * (1 + this.TP_PCT / 100),
       };
     }
@@ -122,7 +131,7 @@ export class RsiEmaTrendStrategy {
       return {
         signal: "SHORT",
         entryPrice: entry,
-        stopLossPrice:   entry * (1 + this.SL_PCT / 100),
+        stopLossPrice: entry * (1 + this.SL_PCT / 100),
         takeProfitPrice: entry * (1 - this.TP_PCT / 100),
       };
     }
