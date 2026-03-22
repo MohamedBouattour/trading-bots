@@ -2,7 +2,6 @@ import { Order } from "../../../models/Order";
 import { Position } from "../../../models/Position";
 import { Trade } from "../../../models/Trade";
 import { BotConfig } from "../../../models/BotConfig";
-import { IndicatorService } from "../../../shared/indicators/IndicatorService";
 import { IBot, BotSummary } from "./IBot";
 
 export abstract class BaseStrategyBot implements IBot {
@@ -24,6 +23,7 @@ export abstract class BaseStrategyBot implements IBot {
   protected _start_timestamp: number | null = null;
   protected _end_timestamp: number | null = null;
   protected _last_trade_candle: number = -1;
+  public halted_by_dd: boolean = false;
 
   constructor(config: BotConfig) {
     this.symbol = config.symbol ?? "BTCUSDT";
@@ -50,8 +50,8 @@ export abstract class BaseStrategyBot implements IBot {
     lows_history?: number[],
   ): void;
 
-  protected _update_equity(current_close: number): void {
-    const equity =
+  protected _calculate_equity(current_close: number): number {
+    return (
       this.balance +
       this.positions.reduce((s, p) => {
         const pnl =
@@ -62,7 +62,12 @@ export abstract class BaseStrategyBot implements IBot {
           (p.meta as any)?.margin ??
           (p.entry_price * p.quantity) / this.leverage;
         return s + margin + pnl;
-      }, 0);
+      }, 0)
+    );
+  }
+
+  protected _update_equity(current_close: number): void {
+    const equity = this._calculate_equity(current_close);
     if (equity > this._peak_equity) this._peak_equity = equity;
     this.equity_curve.push(equity);
 
@@ -91,15 +96,19 @@ export abstract class BaseStrategyBot implements IBot {
     size_pct: number = 100.0,
     reason: string = "ENTRY",
   ): void {
-    const trade_allocation = this.initial_balance * (size_pct / 100);
-    const margin = Math.min(this.balance, trade_allocation) * 0.99;
-    const qty = (margin / price) * this.leverage; // leveraged contract size
-    const notional = qty * price; // = margin * leverage
+    const equity = this._calculate_equity(price);
+    const target_exposure = equity * (size_pct / 100);
+    const max_budget = Math.min(this.balance, target_exposure);
+
+    const factor = 1 / this.leverage + this.fee_pct / 100;
+    const notional = max_budget / factor;
+    const qty = notional / price;
+    const margin = notional / this.leverage;
     const fee = (notional * this.fee_pct) / 100;
 
-    if (margin <= 0 || margin + fee > this.balance) return;
+    if (margin <= 0 || margin + fee > this.balance + 1e-9) return;
 
-    this.balance -= margin + fee; // only MARGIN is deducted, not notional
+    this.balance -= margin + fee;
     const pos = new Position(price, qty, tp, sl, 0, side);
     pos.meta = { opened_at_candle: this._candle_counter, margin };
     this.positions.push(pos);

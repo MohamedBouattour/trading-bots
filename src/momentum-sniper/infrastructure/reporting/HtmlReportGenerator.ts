@@ -480,7 +480,13 @@ The bot scans 4-hour candles and enters a trade only when **both** a momentum si
             const chartOptions = {
                 layout: { background: { color: '#161b22' }, textColor: '#d1d4dc' },
                 grid: { vertLines: { color: '#30363d' }, horzLines: { color: '#30363d' } },
-                timeScale: { visible: true, timeVisible: true, borderColor: '#30363d' },
+                timeScale: { 
+                    visible: true, 
+                    timeVisible: true, 
+                    borderColor: '#30363d',
+                    rightOffset: 20,
+                    fixRightEdge: false
+                },
                 rightPriceScale: { borderColor: '#30363d' },
                 crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
             };
@@ -505,13 +511,25 @@ The bot scans 4-hour candles and enters a trade only when **both** a momentum si
             slSeries.setData(${JSON.stringify(slCurveData)});
 
             candleSeries.setMarkers(${JSON.stringify(markers)});
-            chart.timeScale().fitContent();
+            
+            // Set initial zoom to the last 200 candles and leave space on the right
+            const totalCandles = ${JSON.stringify(candleData.length)};
+            chart.timeScale().setVisibleLogicalRange({ 
+                from: Math.max(0, totalCandles - 150), 
+                to: totalCandles + 20 
+            });
 
             // RSI Chart Setup
             const rsiChartOptions = {
                 layout: { background: { color: 'transparent' }, textColor: '#d1d4dc' },
-                grid: { vertLines: { color: '#30363d' }, horzLines: { color: '#30363d' } },
-                timeScale: { visible: true, timeVisible: true, borderColor: '#30363d' },
+                grid: { vertLines: { color: '#30363d', visible: false }, horzLines: { color: '#30363d', visible: false } },
+                timeScale: { 
+                    visible: true, 
+                    timeVisible: true, 
+                    borderColor: '#30363d',
+                    rightOffset: 20,
+                    fixRightEdge: false
+                },
                 rightPriceScale: { borderColor: '#30363d' },
                 crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
             };
@@ -526,8 +544,12 @@ The bot scans 4-hour candles and enters a trade only when **both** a momentum si
             rsiSeries.createPriceLine(obLine);
             rsiSeries.createPriceLine(osLine);
 
-            chart.timeScale().subscribeVisibleTimeRangeChange(range => { rsiChart.timeScale().setVisibleRange(range); });
-            rsiChart.timeScale().subscribeVisibleTimeRangeChange(range => { chart.timeScale().setVisibleRange(range); });
+            chart.timeScale().subscribeVisibleLogicalRangeChange(range => { 
+                if (range) rsiChart.timeScale().setVisibleLogicalRange(range); 
+            });
+            rsiChart.timeScale().subscribeVisibleLogicalRangeChange(range => { 
+                if (range) chart.timeScale().setVisibleLogicalRange(range); 
+            });
 
             // Equity Curve Setup
             const ctx = document.getElementById('equityChart').getContext('2d');

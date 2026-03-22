@@ -100,14 +100,14 @@ export class RsiEmaTrendStrategy {
       this.RSI_SMA_PERIOD,
     );
 
-    const recentRsi = rsiValues.slice(-this.CONFIRMATION_LOOKBACK);
+    const recentRsi = prevRsiHistory.slice(-this.CONFIRMATION_LOOKBACK);
     const wasOversold = recentRsi.some((v) => v < this.OVERSOLD_THRESHOLD);
     const wasOverbought = recentRsi.some((v) => v > this.OVERBOUGHT_THRESHOLD);
 
     // LONG: close > EMA, RSI crosses above its SMA, confirmed oversold recently
     if (
       currentCandle.close > ema &&
-      prevRsi < prevRsiSma &&
+      prevRsi <= prevRsiSma &&
       currentRsi > currentRsiSma &&
       wasOversold
     ) {
@@ -123,7 +123,7 @@ export class RsiEmaTrendStrategy {
     // SHORT: close < EMA, RSI crosses below its SMA, confirmed overbought recently
     if (
       currentCandle.close < ema &&
-      prevRsi > prevRsiSma &&
+      prevRsi >= prevRsiSma &&
       currentRsi < currentRsiSma &&
       wasOverbought
     ) {

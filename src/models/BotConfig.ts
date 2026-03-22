@@ -25,4 +25,10 @@ export interface BotConfig {
   exit_on_trend_reversal?: boolean;
   leverage?: number;
   use_futures?: boolean;
+  rsi_long_os_level?: number;
+  rsi_short_ob_level?: number;
+  rsi_ob_os_lookback?: number;
+  max_exposure?: number;
+  max_dd_exit?: number;
+  trailing_stop?: number;
 }
