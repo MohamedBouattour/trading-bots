@@ -30,8 +30,8 @@ const CONFIG: BotConfig = {
   stop_loss_pct: parseFloat(process.env.STOP_LOSS || "1.5"), // was 2.0
   trailing_stop_pct: parseFloat(process.env.TRAILING_STOP || "0.0"),
   martingale_factor: parseFloat(process.env.MARTINGALE || "3.0"),
-  max_exposure_pct: parseFloat(process.env.MAX_EXPOSURE || "60.0"),
-  max_drawdown_exit_pct: parseFloat(process.env.MAX_DD_EXIT || "10.0"),
+  max_exposure: parseFloat(process.env.MAX_EXPOSURE || "60.0"),
+  max_dd_exit: parseFloat(process.env.MAX_DD_EXIT || "10.0"),
   fee_pct: parseFloat(process.env.FEE_PCT || "0.04"),
   rsi_threshold: parseFloat(process.env.RSI_THRESHOLD || "45.0"),
   rsi_period: parseInt(process.env.RSI_PERIOD || "7"), // was 14

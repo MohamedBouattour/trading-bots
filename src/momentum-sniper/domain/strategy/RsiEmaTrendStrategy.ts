@@ -55,6 +55,19 @@ export class RsiEmaTrendStrategy {
     this.TP_PCT = config.tpPct ?? 6.0;
   }
 
+  public getParams() {
+    return {
+      EMA_PERIOD: this.EMA_PERIOD,
+      RSI_PERIOD: this.RSI_PERIOD,
+      RSI_SMA_PERIOD: this.RSI_SMA_PERIOD,
+      OVERSOLD_THRESHOLD: this.OVERSOLD_THRESHOLD,
+      OVERBOUGHT_THRESHOLD: this.OVERBOUGHT_THRESHOLD,
+      CONFIRMATION_LOOKBACK: this.CONFIRMATION_LOOKBACK,
+      SL_PCT: this.SL_PCT,
+      TP_PCT: this.TP_PCT,
+    };
+  }
+
   public checkSignal(ohlcvData: OHLCV[]): StrategySignal {
     const noSignal: StrategySignal = {
       signal: "NONE",

@@ -31,4 +31,5 @@ export interface BotConfig {
   max_exposure?: number;
   max_dd_exit?: number;
   trailing_stop?: number;
+  cooldown_candles?: number;
 }

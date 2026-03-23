@@ -18,6 +18,7 @@ export class RsiEmaTrendBot extends BaseStrategyBot {
   private readonly _move_sl_to_be: number;
   private readonly _exit_on_reversal: boolean;
   private readonly _trailing_stop: number;
+  private readonly _cooldown_candles: number;
 
   constructor(config: BotConfig) {
     super(config);
@@ -27,6 +28,20 @@ export class RsiEmaTrendBot extends BaseStrategyBot {
     this._move_sl_to_be = config.move_sl_to_be_at_pct ?? 0;
     this._exit_on_reversal = config.exit_on_trend_reversal ?? false;
     this._trailing_stop = config.trailing_stop ?? 0;
+    this._cooldown_candles = config.cooldown_candles ?? 1;
+
+    // BUG-01 Validation
+    if (
+      this._max_dd_exit === 0 &&
+      process.env.MAX_DD_EXIT &&
+      parseFloat(process.env.MAX_DD_EXIT) > 0
+    ) {
+      if (config.max_drawdown_exit_pct && !config.max_dd_exit) {
+        console.warn(
+          "WARNING: BotConfig maps to max_drawdown_exit_pct instead of max_dd_exit but the config uses max_dd_exit.",
+        );
+      }
+    }
 
     // Wire BotConfig → RsiEmaTrendStrategy so .env values are respected.
     this._strategy = new RsiEmaTrendStrategy({
@@ -95,7 +110,7 @@ export class RsiEmaTrendBot extends BaseStrategyBot {
       const closes = this._ohlcvHistory.map((c) => c.close);
       emaVal = IndicatorService.computeEMA(
         closes,
-        (this._strategy as any).EMA_PERIOD,
+        this._strategy.getParams().EMA_PERIOD,
       );
     }
 
@@ -116,7 +131,7 @@ export class RsiEmaTrendBot extends BaseStrategyBot {
         } else if (high >= pos.take_profit_price) {
           exit_price = pos.take_profit_price;
           exit_reason = "TP";
-        } else if (this._exit_on_reversal && close < emaVal) {
+        } else if (this._exit_on_reversal && emaVal > 0 && close <= emaVal) {
           exit_price = close;
           exit_reason = "REVERSAL";
         }
@@ -128,7 +143,7 @@ export class RsiEmaTrendBot extends BaseStrategyBot {
         } else if (low <= pos.take_profit_price) {
           exit_price = pos.take_profit_price;
           exit_reason = "TP";
-        } else if (this._exit_on_reversal && close > emaVal) {
+        } else if (this._exit_on_reversal && emaVal > 0 && close >= emaVal) {
           exit_price = close;
           exit_reason = "REVERSAL";
         }
@@ -183,7 +198,9 @@ export class RsiEmaTrendBot extends BaseStrategyBot {
     // ── 2. Entry Logic ────────────────────────────────────────────────────
     if (
       this.positions.length === 0 &&
-      this._last_trade_candle !== this._candle_counter
+      (this._last_trade_candle === -1 ||
+        this._candle_counter - this._last_trade_candle >=
+          this._cooldown_candles)
     ) {
       const signalData = this._strategy.checkSignal(this._ohlcvHistory);
 
@@ -216,16 +233,23 @@ export class RsiEmaTrendBot extends BaseStrategyBot {
   }
 
   public get_config(): BotConfig {
+    const params = this._strategy.getParams();
     return {
       symbol: this.symbol,
       initial_balance: this.initial_balance,
       fee_pct: this.fee_pct,
-      trend_period: (this._strategy as any).EMA_PERIOD,
-      rsi_period: (this._strategy as any).RSI_PERIOD,
-      rsi_sma_period: (this._strategy as any).RSI_SMA_PERIOD,
-      stop_loss_pct: (this._strategy as any).SL_PCT,
-      take_profit_pct: (this._strategy as any).TP_PCT,
+      trend_period: params.EMA_PERIOD,
+      rsi_period: params.RSI_PERIOD,
+      rsi_sma_period: params.RSI_SMA_PERIOD,
+      stop_loss_pct: params.SL_PCT,
+      take_profit_pct: params.TP_PCT,
     };
+  }
+
+  public toJSON(): string {
+    const raw: any = JSON.parse(super.toJSON());
+    raw.ohlcv_history = this._ohlcvHistory;
+    return JSON.stringify(raw);
   }
 
   public static fromJSON(jsonStr: string, config: BotConfig): RsiEmaTrendBot {

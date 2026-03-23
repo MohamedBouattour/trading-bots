@@ -177,7 +177,7 @@ export abstract class BaseStrategyBot implements IBot {
     this.positions = [];
     const equity = this.balance;
     if (equity > this._peak_equity) this._peak_equity = equity;
-    this.equity_curve[this.equity_curve.length - 1] = equity;
+    this.equity_curve.push(equity);
     this.sl_curve[this.sl_curve.length - 1] = null;
   }
 

@@ -119,6 +119,7 @@ describe("RsiEmaTrend Strategy and Bot Edge Cases", () => {
   });
 
   it("should update trailing stop", () => {
+    (bot as any)._exit_on_reversal = false;
     bot.balance = 1000;
     const pos = new Position(100, 1, 150, 90, 0, "LONG");
     pos.meta = { opened_at_candle: -1 };
@@ -130,6 +131,7 @@ describe("RsiEmaTrend Strategy and Bot Edge Cases", () => {
   });
 
   it("should update break-even stop", () => {
+    (bot as any)._exit_on_reversal = false;
     const pos = new Position(100, 1, 150, 90, 0, "LONG");
     pos.meta = { opened_at_candle: -1 };
     bot.positions.push(pos);
@@ -160,5 +162,40 @@ describe("RsiEmaTrend Strategy and Bot Edge Cases", () => {
 
     expect(bot.positions.length).toBe(0);
     expect(bot.trade_log[bot.trade_log.length - 1].reason).toBe("REVERSAL");
+  });
+
+  it("should calculate round-trip PnL and fee correctly for exact balances", () => {
+    bot.balance = 1000;
+    (bot as any).fee_pct = 0.04;
+    (bot as any).leverage = 1;
+
+    // BUY 1 BTC @ $1000. Balance was 1000. Max exposure 100%.
+    // Factor = 1 / 1 + 0.04 / 100 = 1.0004
+    // Notional = 1000 / 1.0004 = 999.6001599360256
+    // Using simple round numbers: qty = 1 BTC at $100
+    bot.balance = 200;
+
+    // Manual position opening to keep it clean:
+    const entryPrice = 100;
+    const qty = 1; // Notional = 100
+    const margin = 100;
+    const fee_entry = 100 * (0.04 / 100); // 0.04
+    bot.balance -= margin + fee_entry; // 200 - 100.04 = 99.96
+
+    const pos = new Position(entryPrice, qty, 150, 50, 0, "LONG");
+    pos.meta = { opened_at_candle: -1, margin };
+    bot.positions.push(pos);
+
+    // Manual exit at $110
+    const exitPrice = 110;
+    const notional_exit = 110;
+    const fee_exit = 110 * (0.04 / 100); // 0.044
+
+    const expected_pnl = 110 - 100 - fee_exit; // 10 - 0.044 = 9.956
+    const expected_balance = 99.96 + margin + expected_pnl; // 99.96 + 100 + 9.956 = 209.916
+
+    (bot as any)._market_sell(pos, exitPrice, "TP", Date.now());
+
+    expect(bot.balance).toBeCloseTo(expected_balance, 5);
   });
 });
