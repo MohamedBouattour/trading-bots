@@ -35,10 +35,12 @@ export class RunBacktestUseCase {
     const now = Date.now();
     const tfMs = this._parseTimeframe(timeframe);
     const originalCount = df.length;
-    df = df.filter(row => row.timestamp + tfMs <= now);
-    
+    df = df.filter((row) => row.timestamp + tfMs <= now);
+
     if (df.length < originalCount) {
-      console.log(`  Filtered out ${originalCount - df.length} incomplete candle(s).`);
+      console.log(
+        `  Filtered out ${originalCount - df.length} incomplete candle(s).`,
+      );
     }
 
     if (df.length === 0) {
@@ -56,7 +58,7 @@ export class RunBacktestUseCase {
     // ... rest of the setup
     const HISTORY_BUFFER = 50;
     const historyCap = Math.max(
-      (config.trend_period ?? 200) + HISTORY_BUFFER,
+      (config.trend_period ?? 200) * 2 + HISTORY_BUFFER,
       300,
     );
 
@@ -94,11 +96,9 @@ export class RunBacktestUseCase {
       if (lows.length > historyCap) lows.shift();
     }
 
-    // FIX #5: settle any position still open when data ends.
-    // Without this, unrealized P&L inflates final_value while Total Trades
-    // and Win Rate both read 0 — because the sell trade was never recorded.
-    const lastCandle = df[df.length - 1];
-    bot.close_all_positions(lastCandle.close, lastCandle.timestamp);
+    // End of data: do NOT force-close positions (ISSUE-04).
+    // This leaves the position open in trade_log, preventing artificial exits.
+    // However, the report generator must use final equity as peak_equity.
 
     const results = bot.summary();
     console.log("\n" + "=".repeat(60));
@@ -111,8 +111,6 @@ export class RunBacktestUseCase {
       console.log(`  ${label.padEnd(25)} ${v}`);
     }
 
-    // FIX #1: await the report generation so "Done." only prints after the
-    // file has been fully written and errors are not silently swallowed.
     await this.reportGenerator.generateReport(df, bot, outputPath);
     console.log("\nDone.");
   }

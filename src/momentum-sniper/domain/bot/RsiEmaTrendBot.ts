@@ -296,6 +296,7 @@ export class RsiEmaTrendBot extends BaseStrategyBot {
     (bot as any)._start_timestamp = raw.start_timestamp || null;
     (bot as any)._end_timestamp = raw.end_timestamp || null;
     (bot as any)._ohlcvHistory = raw.ohlcv_history || [];
+    bot.halted_by_dd = raw.halted_by_dd || false;
     return bot;
   }
 }

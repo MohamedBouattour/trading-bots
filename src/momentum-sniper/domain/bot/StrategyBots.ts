@@ -236,6 +236,7 @@ export abstract class BaseStrategyBot implements IBot {
       candle_counter: this._candle_counter,
       start_timestamp: this._start_timestamp,
       end_timestamp: this._end_timestamp,
+      halted_by_dd: this.halted_by_dd,
     });
   }
 }
