@@ -106,7 +106,7 @@ describe("RsiEmaTrend Strategy and Bot Edge Cases", () => {
     expect(bot.positions.length).toBe(0);
   });
 
-  it("should skip same-candle SL/TP checks (realism fix)", () => {
+  it("should evaluate SL/TP checks on the opening candle (entry at open)", () => {
     bot.on_candle(Date.now(), 100, 105, 95, 100, 1000, []);
 
     const pos = new Position(100, 1, 105, 95, 0, "LONG");
@@ -115,7 +115,7 @@ describe("RsiEmaTrend Strategy and Bot Edge Cases", () => {
 
     bot.on_candle(Date.now(), 100, 105, 90, 100, 1000, []);
 
-    expect(bot.positions.length).toBe(1); // STILL OPEN because it skipped!
+    expect(bot.positions.length).toBe(0); // CLOSED because we no longer skip same-candle checks (BUG-04 fixed)
   });
 
   it("should update trailing stop", () => {

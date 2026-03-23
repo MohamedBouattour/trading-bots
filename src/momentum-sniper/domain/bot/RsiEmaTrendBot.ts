@@ -23,8 +23,8 @@ export class RsiEmaTrendBot extends BaseStrategyBot {
   constructor(config: BotConfig) {
     super(config);
 
-    this._max_exposure = config.max_exposure ?? 100;
-    this._max_dd_exit = config.max_dd_exit ?? 0;
+    this._max_exposure = config.max_exposure ?? config.max_exposure_pct ?? 100;
+    this._max_dd_exit = config.max_dd_exit ?? config.max_drawdown_exit_pct ?? 0;
     this._move_sl_to_be = config.move_sl_to_be_at_pct ?? 0;
     this._exit_on_reversal = config.exit_on_trend_reversal ?? false;
     this._trailing_stop = config.trailing_stop ?? 0;
@@ -50,7 +50,8 @@ export class RsiEmaTrendBot extends BaseStrategyBot {
       rsiSmaPeriod: config.rsi_sma_period ?? 7,
       oversoldThreshold: config.rsi_long_os_level ?? 40,
       overboughtThreshold: config.rsi_short_ob_level ?? 60,
-      confirmationLookback: config.rsi_ob_os_lookback ?? 5,
+      confirmationLookback:
+        config.rsi_under_sma_duration ?? config.rsi_ob_os_lookback ?? 5,
       slPct: config.stop_loss_pct ?? 1.5,
       tpPct: config.take_profit_pct ?? 6.0,
     });
@@ -95,7 +96,7 @@ export class RsiEmaTrendBot extends BaseStrategyBot {
         ((this._peak_equity - current_equity) / this._peak_equity) * 100;
       if (dd_pct >= this._max_dd_exit) {
         if (this.positions.length > 0) {
-          this.close_all_positions(close, timestamp);
+          this.close_all_positions(close, timestamp, false);
         }
         this.halted_by_dd = true;
         this._update_equity(close);
@@ -103,7 +104,49 @@ export class RsiEmaTrendBot extends BaseStrategyBot {
       }
     }
 
-    // ── 1. Manage existing positions ──────────────────────────────────────
+    // ── 1. Entry Logic ────────────────────────────────────────────────────
+    if (
+      this.positions.length === 0 &&
+      (this._last_trade_candle === -1 ||
+        this._candle_counter - this._last_trade_candle >=
+          this._cooldown_candles)
+    ) {
+      if (this._ohlcvHistory.length >= 2) {
+        const signalData = this._strategy.checkSignal(
+          this._ohlcvHistory.slice(0, -1),
+        );
+
+        if (signalData.signal === "LONG") {
+          const entryPrice = open;
+          const sl = entryPrice * (1 - this._strategy.getParams().SL_PCT / 100);
+          const tp = entryPrice * (1 + this._strategy.getParams().TP_PCT / 100);
+          this._open_position(
+            "LONG",
+            entryPrice,
+            timestamp,
+            sl,
+            tp,
+            this._max_exposure,
+            "RSI_EMA_LONG",
+          );
+        } else if (signalData.signal === "SHORT") {
+          const entryPrice = open;
+          const sl = entryPrice * (1 + this._strategy.getParams().SL_PCT / 100);
+          const tp = entryPrice * (1 - this._strategy.getParams().TP_PCT / 100);
+          this._open_position(
+            "SHORT",
+            entryPrice,
+            timestamp,
+            sl,
+            tp,
+            this._max_exposure,
+            "RSI_EMA_SHORT",
+          );
+        }
+      }
+    }
+
+    // ── 2. Manage existing positions ──────────────────────────────────────
     const pos_copy = [...this.positions];
     let emaVal = 0;
     if (this._exit_on_reversal) {
@@ -115,35 +158,56 @@ export class RsiEmaTrendBot extends BaseStrategyBot {
     }
 
     for (const pos of pos_copy) {
-      const posOpenedAt = (pos.meta as any)?.opened_at_candle;
-      if (posOpenedAt === this._candle_counter) {
-        // Skip SL/TP check on the same candle it was opened to prevent lookahead logic bias
-        continue;
-      }
-
       let exit_price = 0;
       let exit_reason = "";
 
+      const distSL = Math.abs(open - pos.stop_loss_price);
+      const distTP = Math.abs(open - pos.take_profit_price);
+
       if (pos.side === "LONG") {
-        if (low <= pos.stop_loss_price) {
+        const hitSL = low <= pos.stop_loss_price;
+        const hitTP = high >= pos.take_profit_price;
+        const hitRev = this._exit_on_reversal && emaVal > 0 && close <= emaVal;
+
+        if (hitSL && hitTP) {
+          if (distSL <= distTP) {
+            exit_price = pos.stop_loss_price;
+            exit_reason = "SL";
+          } else {
+            exit_price = pos.take_profit_price;
+            exit_reason = "TP";
+          }
+        } else if (hitSL) {
           exit_price = pos.stop_loss_price;
           exit_reason = "SL";
-        } else if (high >= pos.take_profit_price) {
+        } else if (hitTP) {
           exit_price = pos.take_profit_price;
           exit_reason = "TP";
-        } else if (this._exit_on_reversal && emaVal > 0 && close <= emaVal) {
+        } else if (hitRev) {
           exit_price = close;
           exit_reason = "REVERSAL";
         }
       } else {
         // SHORT
-        if (high >= pos.stop_loss_price) {
+        const hitSL = high >= pos.stop_loss_price;
+        const hitTP = low <= pos.take_profit_price;
+        const hitRev = this._exit_on_reversal && emaVal > 0 && close >= emaVal;
+
+        if (hitSL && hitTP) {
+          if (distSL <= distTP) {
+            exit_price = pos.stop_loss_price;
+            exit_reason = "SL";
+          } else {
+            exit_price = pos.take_profit_price;
+            exit_reason = "TP";
+          }
+        } else if (hitSL) {
           exit_price = pos.stop_loss_price;
           exit_reason = "SL";
-        } else if (low <= pos.take_profit_price) {
+        } else if (hitTP) {
           exit_price = pos.take_profit_price;
           exit_reason = "TP";
-        } else if (this._exit_on_reversal && emaVal > 0 && close >= emaVal) {
+        } else if (hitRev) {
           exit_price = close;
           exit_reason = "REVERSAL";
         }
@@ -192,40 +256,6 @@ export class RsiEmaTrendBot extends BaseStrategyBot {
             }
           }
         }
-      }
-    }
-
-    // ── 2. Entry Logic ────────────────────────────────────────────────────
-    if (
-      this.positions.length === 0 &&
-      (this._last_trade_candle === -1 ||
-        this._candle_counter - this._last_trade_candle >=
-          this._cooldown_candles)
-    ) {
-      const signalData = this._strategy.checkSignal(this._ohlcvHistory);
-
-      if (signalData.signal === "LONG") {
-        this._open_position(
-          "LONG",
-          signalData.entryPrice,
-          timestamp,
-          signalData.stopLossPrice,
-          signalData.takeProfitPrice,
-          this._max_exposure,
-          "RSI_EMA_LONG",
-        );
-        this._last_trade_candle = this._candle_counter;
-      } else if (signalData.signal === "SHORT") {
-        this._open_position(
-          "SHORT",
-          signalData.entryPrice,
-          timestamp,
-          signalData.stopLossPrice,
-          signalData.takeProfitPrice,
-          this._max_exposure,
-          "RSI_EMA_SHORT",
-        );
-        this._last_trade_candle = this._candle_counter;
       }
     }
 

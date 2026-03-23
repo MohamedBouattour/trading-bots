@@ -61,7 +61,12 @@ export abstract class BaseStrategyBot implements IBot {
         const margin =
           (p.meta as any)?.margin ??
           (p.entry_price * p.quantity) / this.leverage;
-        return s + margin + pnl;
+        let effective_pnl = pnl;
+        if (this.use_futures && pnl < -margin) {
+          effective_pnl = -margin;
+        }
+
+        return s + margin + effective_pnl;
       }, 0)
     );
   }
@@ -169,7 +174,11 @@ export abstract class BaseStrategyBot implements IBot {
     }
   }
 
-  public close_all_positions(price: number, timestamp: number): void {
+  public close_all_positions(
+    price: number,
+    timestamp: number,
+    update_last_equity: boolean = true,
+  ): void {
     const pos_copy = [...this.positions];
     for (const pos of pos_copy) {
       this._market_sell(pos, price, "END_OF_DATA", timestamp);
@@ -177,8 +186,10 @@ export abstract class BaseStrategyBot implements IBot {
     this.positions = [];
     const equity = this.balance;
     if (equity > this._peak_equity) this._peak_equity = equity;
-    this.equity_curve.push(equity);
-    this.sl_curve[this.sl_curve.length - 1] = null;
+
+    if (update_last_equity) {
+      this.equity_curve[this.equity_curve.length - 1] = equity;
+    }
   }
 
   public summary(): BotSummary {
