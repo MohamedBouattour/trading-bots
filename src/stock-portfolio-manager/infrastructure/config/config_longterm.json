@@ -1,0 +1,17 @@
+{
+  "totalBalanceUSDT": 1184.28,
+  "assets": [
+    { "symbol": "MUUSDT", "targetWeight": 0.25 },
+    { "symbol": "TSMUSDT", "targetWeight": 0.2 },
+    { "symbol": "GOOGLUSDT", "targetWeight": 0.2 },
+    { "symbol": "NVDAUSDT", "targetWeight": 0.2 },
+    { "symbol": "AAPLUSDT", "targetWeight": 0.15 }
+  ],
+  "driftThresholdPct": 10,
+  "profitHarvestCeilingPct": 35,
+  "rebalanceIntervalSeconds": 2592000,
+  "leverage": 3,
+  "useFutures": true,
+  "dryRun": false,
+  "feePct": 0.04
+}
