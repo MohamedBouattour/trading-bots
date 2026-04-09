@@ -7,9 +7,9 @@
     { "symbol": "NVDAUSDT", "targetWeight": 0.2 },
     { "symbol": "AAPLUSDT", "targetWeight": 0.15 }
   ],
-  "driftThresholdPct": 10,
+  "driftThresholdPct": 5,
   "profitHarvestCeilingPct": 35,
-  "rebalanceIntervalSeconds": 2592000,
+  "rebalanceIntervalSeconds": 604800,
   "leverage": 3,
   "useFutures": true,
   "dryRun": false,

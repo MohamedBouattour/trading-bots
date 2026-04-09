@@ -42,21 +42,7 @@ export class RunRebalanceCheckUseCase {
             );
         }
 
-        // ── 2. Interval check ──────────────────────────────────────────────
-        if (!forceCheck && state) {
-            const elapsed = Date.now() - state.lastCheckTimestamp;
-            const intervalMs = this.config.rebalanceIntervalSeconds * 1000;
-            if (elapsed < intervalMs) {
-                const remaining = intervalMs - elapsed;
-                const hoursLeft = (remaining / 3_600_000).toFixed(1);
-                this.logger.info(
-                    `Skipping check — only ${hoursLeft}h since last check (interval: ${(this.config.rebalanceIntervalSeconds / 86400).toFixed(0)} days)`,
-                );
-                return null;
-            }
-        }
-
-        // ── 3. Fetch portfolio data with retry ─────────────────────────────
+        // ── 2. Fetch portfolio data with retry ─────────────────────────────
         const snapshot = await this.fetchSnapshotWithRetry();
         if (!snapshot) {
             this.logger.error(
@@ -65,16 +51,31 @@ export class RunRebalanceCheckUseCase {
             return null;
         }
 
-        // ── 4. Log portfolio dashboard ─────────────────────────────────────
+        // ── 3. Log portfolio dashboard ─────────────────────────────────────
         this.logPortfolioDashboard(snapshot, state);
 
-        // ── 5. Run rebalancing engine ──────────────────────────────────────
+        // ── 4. Run rebalancing engine ──────────────────────────────────────
         const result = this.engine.analyzePortfolio(snapshot, this.config);
         this.logger.info(result.summary);
 
+        // ── 5. Interval check (only block TRADES, keep the dashboard) ──────
+        let canTrade = true;
+        if (!forceCheck && state && state.lastCheckTimestamp) {
+            const elapsed = Date.now() - state.lastCheckTimestamp;
+            const intervalMs = this.config.rebalanceIntervalSeconds * 1000;
+            if (elapsed < intervalMs) {
+                const remaining = intervalMs - elapsed;
+                const hoursLeft = (remaining / 3_600_000).toFixed(1);
+                this.logger.info(
+                    `[COOLDOWN ACTIVE] Trade execution blocked. Next rebalance window in ${hoursLeft}h`,
+                );
+                canTrade = false;
+            }
+        }
+
         // ── 6. Execute trades if needed ────────────────────────────────────
         const tradeResults: TradeResult[] = [];
-        if (result.actions.length > 0) {
+        if (canTrade && result.actions.length > 0) {
             if (this.config.dryRun) {
                 this.logger.warn("DRY RUN MODE — trades will NOT be executed");
                 for (const action of result.actions) {
@@ -119,7 +120,10 @@ export class RunRebalanceCheckUseCase {
             ? { ...state }
             : createInitialBotState(snapshot.totalValueUSDT);
 
-        updatedState.lastCheckTimestamp = now;
+        // Only update the cooldown timer if we actually reached the interval!
+        if (canTrade) {
+            updatedState.lastCheckTimestamp = now;
+        }
         updatedState.lastSnapshot = snapshot;
 
         if (result.actions.length > 0 && !this.config.dryRun) {
