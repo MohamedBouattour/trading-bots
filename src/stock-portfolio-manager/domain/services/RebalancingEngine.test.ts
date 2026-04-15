@@ -23,6 +23,8 @@ function makeConfig(overrides: Partial<PortfolioConfig> = {}): PortfolioConfig {
         useFutures: true,
         dryRun: false,
         feePct: 0.04,
+        compoundThresholdUSDT: 10,
+        autoScale: false, // disabled by default in tests to isolate behavior
         ...overrides,
     };
 }
@@ -279,6 +281,95 @@ describe("RebalancingEngine", () => {
             expect(harvest).toHaveLength(0);
         });
     });
+
+    // ── Compound Investment ────────────────────────────────────────────
+    describe("compound investment", () => {
+        it("should deploy free cash to underweight assets when above threshold", () => {
+            const allocations = [
+                makeAllocation({ symbol: "MUUSDT", targetWeight: 0.25, currentWeight: 0.23, driftPct: -2, currentValueUSDT: 920, currentPrice: 100 }),
+                makeAllocation({ symbol: "TSMUSDT", targetWeight: 0.20, currentWeight: 0.18, driftPct: -2, currentValueUSDT: 720, currentPrice: 100 }),
+                makeAllocation({ symbol: "GOOGLUSDT", targetWeight: 0.20, currentWeight: 0.19, driftPct: -1, currentValueUSDT: 760, currentPrice: 100 }),
+                makeAllocation({ symbol: "NVDAUSDT", targetWeight: 0.20, currentWeight: 0.20, driftPct: 0, currentValueUSDT: 800, currentPrice: 100 }),
+                makeAllocation({ symbol: "AAPLUSDT", targetWeight: 0.15, currentWeight: 0.15, driftPct: 0, currentValueUSDT: 600, currentPrice: 100 }),
+            ];
+            // $200 free USDT with leverage 1 = $200 notional
+            const snapshot = makeSnapshot(allocations, 200);
+            const config = makeConfig({ compoundThresholdUSDT: 10 });
+            const result = engine.analyzePortfolio(snapshot, config);
+
+            expect(result.compoundTriggered).toBe(true);
+            const compoundActions = result.actions.filter((a) => a.reason === "COMPOUND_INVEST");
+            expect(compoundActions.length).toBeGreaterThan(0);
+            expect(compoundActions.every((a) => a.side === "BUY")).toBe(true);
+        });
+
+        it("should not compound when free cash is below threshold", () => {
+            const allocations = [
+                makeAllocation({ symbol: "MUUSDT", targetWeight: 0.25, currentWeight: 0.25, driftPct: 0, currentValueUSDT: 1000, currentPrice: 100 }),
+                makeAllocation({ symbol: "TSMUSDT", targetWeight: 0.20, currentWeight: 0.20, driftPct: 0, currentValueUSDT: 800, currentPrice: 100 }),
+                makeAllocation({ symbol: "GOOGLUSDT", targetWeight: 0.20, currentWeight: 0.20, driftPct: 0, currentValueUSDT: 800, currentPrice: 100 }),
+                makeAllocation({ symbol: "NVDAUSDT", targetWeight: 0.20, currentWeight: 0.20, driftPct: 0, currentValueUSDT: 800, currentPrice: 100 }),
+                makeAllocation({ symbol: "AAPLUSDT", targetWeight: 0.15, currentWeight: 0.15, driftPct: 0, currentValueUSDT: 600, currentPrice: 100 }),
+            ];
+            // Only $5 free (below $10 threshold)
+            const snapshot = makeSnapshot(allocations, 5);
+            const config = makeConfig({ compoundThresholdUSDT: 10 });
+            const result = engine.analyzePortfolio(snapshot, config);
+
+            expect(result.compoundTriggered).toBe(false);
+            const compoundActions = result.actions.filter((a) => a.reason === "COMPOUND_INVEST");
+            expect(compoundActions).toHaveLength(0);
+        });
+
+        it("should respect leverage when calculating compound budget", () => {
+            const allocations = [
+                makeAllocation({ symbol: "MUUSDT", targetWeight: 0.25, currentWeight: 0.22, driftPct: -3, currentValueUSDT: 880, currentPrice: 100 }),
+                makeAllocation({ symbol: "TSMUSDT", targetWeight: 0.20, currentWeight: 0.18, driftPct: -2, currentValueUSDT: 720, currentPrice: 100 }),
+                makeAllocation({ symbol: "GOOGLUSDT", targetWeight: 0.20, currentWeight: 0.20, driftPct: 0, currentValueUSDT: 800, currentPrice: 100 }),
+                makeAllocation({ symbol: "NVDAUSDT", targetWeight: 0.20, currentWeight: 0.20, driftPct: 0, currentValueUSDT: 800, currentPrice: 100 }),
+                makeAllocation({ symbol: "AAPLUSDT", targetWeight: 0.15, currentWeight: 0.15, driftPct: 0, currentValueUSDT: 600, currentPrice: 100 }),
+            ];
+            // $5 free margin × 3 leverage = $15 notional (above $10 threshold)
+            const snapshot = makeSnapshot(allocations, 5);
+            const config = makeConfig({ compoundThresholdUSDT: 10, leverage: 3 });
+            const result = engine.analyzePortfolio(snapshot, config);
+
+            expect(result.compoundTriggered).toBe(true);
+        });
+    });
+
+    // ── Auto-Scale ────────────────────────────────────────────────────
+    describe("auto-scale", () => {
+        it("should apply auto-scale when portfolio value exceeds config", () => {
+            const allocations = [
+                makeAllocation({ symbol: "MUUSDT", targetWeight: 0.25, currentWeight: 0.25, driftPct: 0, currentValueUSDT: 1250, currentPrice: 100 }),
+                makeAllocation({ symbol: "TSMUSDT", targetWeight: 0.20, currentWeight: 0.20, driftPct: 0, currentValueUSDT: 1000, currentPrice: 100 }),
+                makeAllocation({ symbol: "GOOGLUSDT", targetWeight: 0.20, currentWeight: 0.20, driftPct: 0, currentValueUSDT: 1000, currentPrice: 100 }),
+                makeAllocation({ symbol: "NVDAUSDT", targetWeight: 0.20, currentWeight: 0.20, driftPct: 0, currentValueUSDT: 1000, currentPrice: 100 }),
+                makeAllocation({ symbol: "AAPLUSDT", targetWeight: 0.15, currentWeight: 0.15, driftPct: 0, currentValueUSDT: 750, currentPrice: 100 }),
+            ];
+            const snapshot = makeSnapshot(allocations); // total = 5000
+            const config = makeConfig({ totalBalanceUSDT: 4000, autoScale: true });
+            const result = engine.analyzePortfolio(snapshot, config);
+
+            expect(result.autoScaleApplied).toBe(true);
+        });
+
+        it("should not auto-scale when portfolio value is below config", () => {
+            const allocations = [
+                makeAllocation({ symbol: "MUUSDT", targetWeight: 0.25, currentWeight: 0.25, driftPct: 0, currentValueUSDT: 750, currentPrice: 100 }),
+                makeAllocation({ symbol: "TSMUSDT", targetWeight: 0.20, currentWeight: 0.20, driftPct: 0, currentValueUSDT: 600, currentPrice: 100 }),
+                makeAllocation({ symbol: "GOOGLUSDT", targetWeight: 0.20, currentWeight: 0.20, driftPct: 0, currentValueUSDT: 600, currentPrice: 100 }),
+                makeAllocation({ symbol: "NVDAUSDT", targetWeight: 0.20, currentWeight: 0.20, driftPct: 0, currentValueUSDT: 600, currentPrice: 100 }),
+                makeAllocation({ symbol: "AAPLUSDT", targetWeight: 0.15, currentWeight: 0.15, driftPct: 0, currentValueUSDT: 450, currentPrice: 100 }),
+            ];
+            const snapshot = makeSnapshot(allocations); // total = 3000
+            const config = makeConfig({ totalBalanceUSDT: 4000, autoScale: true });
+            const result = engine.analyzePortfolio(snapshot, config);
+
+            expect(result.autoScaleApplied).toBe(false);
+        });
+    });
 });
 
 // ── Config Validation ───────────────────────────────────────────────
@@ -287,7 +378,7 @@ describe("validatePortfolioConfig", () => {
     // imported via ES import at top of file
 
     it("should pass for a valid config", () => {
-        const config = {
+        const config: PortfolioConfig = {
             totalBalanceUSDT: 4000,
             assets: [
                 { symbol: "MUUSDT", targetWeight: 0.25 },
@@ -303,13 +394,15 @@ describe("validatePortfolioConfig", () => {
             useFutures: true,
             dryRun: false,
             feePct: 0.04,
+            compoundThresholdUSDT: 10,
+            autoScale: true,
         };
         const errors = validatePortfolioConfig(config);
         expect(errors).toHaveLength(0);
     });
 
     it("should fail when weights don't sum to 1.0", () => {
-        const config = {
+        const config: PortfolioConfig = {
             totalBalanceUSDT: 4000,
             assets: [
                 { symbol: "A", targetWeight: 0.50 },
@@ -322,13 +415,15 @@ describe("validatePortfolioConfig", () => {
             useFutures: true,
             dryRun: false,
             feePct: 0.04,
+            compoundThresholdUSDT: 10,
+            autoScale: true,
         };
         const errors = validatePortfolioConfig(config);
         expect(errors.some((e: string) => e.includes("sum to 1.0"))).toBe(true);
     });
 
     it("should fail when drift threshold is out of range", () => {
-        const config = {
+        const config: PortfolioConfig = {
             totalBalanceUSDT: 4000,
             assets: [{ symbol: "A", targetWeight: 1.0 }],
             driftThresholdPct: 60,
@@ -338,13 +433,15 @@ describe("validatePortfolioConfig", () => {
             useFutures: true,
             dryRun: false,
             feePct: 0.04,
+            compoundThresholdUSDT: 10,
+            autoScale: true,
         };
         const errors = validatePortfolioConfig(config);
         expect(errors.some((e: string) => e.includes("driftThresholdPct"))).toBe(true);
     });
 
     it("should fail when rebalance interval is too short", () => {
-        const config = {
+        const config: PortfolioConfig = {
             totalBalanceUSDT: 4000,
             assets: [{ symbol: "A", targetWeight: 1.0 }],
             driftThresholdPct: 10,
@@ -354,6 +451,8 @@ describe("validatePortfolioConfig", () => {
             useFutures: true,
             dryRun: false,
             feePct: 0.04,
+            compoundThresholdUSDT: 10,
+            autoScale: true,
         };
         const errors = validatePortfolioConfig(config);
         expect(errors.some((e: string) => e.includes("rebalanceIntervalSeconds"))).toBe(true);

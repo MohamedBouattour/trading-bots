@@ -13,5 +13,7 @@
   "leverage": 3,
   "useFutures": true,
   "dryRun": false,
-  "feePct": 0.04
+  "feePct": 0.04,
+  "compoundThresholdUSDT": 10,
+  "autoScale": true
 }

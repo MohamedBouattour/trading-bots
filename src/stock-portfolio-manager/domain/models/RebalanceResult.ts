@@ -14,6 +14,10 @@ export interface RebalanceResult {
     rebalanceTriggered: boolean;
     /** Whether profit-harvest was triggered */
     profitHarvestTriggered: boolean;
+    /** Whether compound investment was triggered (free cash deployed) */
+    compoundTriggered: boolean;
+    /** Whether auto-scale updated the totalBalanceUSDT */
+    autoScaleApplied: boolean;
     /** Human-readable summary of the cycle */
     summary: string;
 }

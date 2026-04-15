@@ -46,7 +46,6 @@ const isForceInit = args.includes("--force");
 const isDryRun =
     args.includes("--dry-run") ||
     process.env.REBALANCER_DRY_RUN === "true";
-const isForceCheck = args.includes("--force-check");
 
 // ── Load config ────────────────────────────────────────────────────────
 function loadConfig(): PortfolioConfig {
@@ -117,14 +116,28 @@ async function main(): Promise<void> {
     }
 
     const modeLabel = config.dryRun ? "DRY RUN" : "LIVE";
+    const compoundLabel = (config.compoundThresholdUSDT ?? 10) > 0
+        ? `Compound: ≥$${config.compoundThresholdUSDT ?? 10}`
+        : "Compound: OFF";
+    const scaleLabel = config.autoScale !== false ? "Auto-Scale: ON" : "Auto-Scale: OFF";
+
     logger.info(
-        `🚀 HODL REBALANCER | ${modeLabel} | ${config.assets.length} assets | ` +
-        `Interval: ${(config.rebalanceIntervalSeconds / 86400).toFixed(0)} days | ` +
-        `Drift: ±${config.driftThresholdPct}% | Harvest: ${config.profitHarvestCeilingPct}%`,
+        "═══════════════════════════════════════════════════════════════",
+    );
+    logger.info(
+        `🚀 HODL REBALANCER | ${modeLabel} | ${config.leverage}× LEV | ${config.assets.length} assets`,
+    );
+    logger.info(
+        `   Interval: ${(config.rebalanceIntervalSeconds / 86400).toFixed(0)}d | ` +
+        `Drift: ±${config.driftThresholdPct}% | Harvest: ${config.profitHarvestCeilingPct}% | ` +
+        `${compoundLabel} | ${scaleLabel}`,
+    );
+    logger.info(
+        "═══════════════════════════════════════════════════════════════",
     );
 
     // ── Initialize adapters ───────────────────────────────────────────
-    const adapter = new BinanceFuturesPortfolioAdapter(apiKey, apiSecret);
+    const adapter = new BinanceFuturesPortfolioAdapter(apiKey, apiSecret, logger);
     const statePath =
         process.env.REBALANCER_STATE_PATH ||
         path.join(process.cwd(), "state_rebalancer_longterm.json");
@@ -173,7 +186,7 @@ async function main(): Promise<void> {
 
         const runCycle = async () => {
             try {
-                await rebalanceUseCase.execute(isForceCheck);
+                await rebalanceUseCase.execute();
             } catch (err) {
                 const error = err instanceof Error ? err : new Error(String(err));
                 logger.error("Rebalance cycle failed", error);
@@ -193,7 +206,7 @@ async function main(): Promise<void> {
     } else {
         // Single-shot mode
         try {
-            await rebalanceUseCase.execute(isForceCheck);
+            await rebalanceUseCase.execute();
         } catch (err) {
             const error = err instanceof Error ? err : new Error(String(err));
             logger.error("Rebalance cycle failed", error);

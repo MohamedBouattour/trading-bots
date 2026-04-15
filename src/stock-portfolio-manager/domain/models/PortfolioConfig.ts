@@ -24,6 +24,10 @@ export interface PortfolioConfig {
     dryRun: boolean;
     /** Taker fee as a percentage, e.g. 0.04 */
     feePct: number;
+    /** Minimum free balance (notional USDT) to trigger compound investment. Default: 10 */
+    compoundThresholdUSDT: number;
+    /** Whether to auto-update totalBalanceUSDT to actual portfolio value each cycle */
+    autoScale: boolean;
 }
 
 /**
@@ -82,6 +86,16 @@ export function validatePortfolioConfig(config: PortfolioConfig): string[] {
     if (config.totalBalanceUSDT <= 0) {
         errors.push(
             `totalBalanceUSDT must be positive (got ${config.totalBalanceUSDT})`,
+        );
+    }
+
+    // Compound threshold
+    if (
+        config.compoundThresholdUSDT !== undefined &&
+        config.compoundThresholdUSDT < 0
+    ) {
+        errors.push(
+            `compoundThresholdUSDT must be >= 0 (got ${config.compoundThresholdUSDT})`,
         );
     }
 

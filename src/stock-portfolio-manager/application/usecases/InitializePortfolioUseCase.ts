@@ -74,8 +74,8 @@ export class InitializePortfolioUseCase {
                         asset.symbol,
                         this.config.leverage,
                     );
-                    this.logger.info(
-                        `⚙️  Leverage set to ${this.config.leverage}x for ${asset.symbol}`,
+                    this.logger.debug(
+                        `Leverage set to ${this.config.leverage}x for ${asset.symbol}`,
                     );
                 } catch (err) {
                     const error = err instanceof Error ? err : new Error(String(err));
@@ -122,8 +122,8 @@ export class InitializePortfolioUseCase {
                     tradeResults.push(result);
                     totalSpent += buyAmountUSDT;
 
-                    this.logger.trade(
-                        `✅ ${result.status}: Bought ${result.executedQty} ${asset.symbol} @ $${result.executedPrice.toFixed(2)}`,
+                    this.logger.success(
+                        `${result.status}: Bought ${result.executedQty} ${asset.symbol} @ $${result.executedPrice.toFixed(2)}`,
                     );
 
                     // Small delay between orders to avoid rate limiting
@@ -148,8 +148,8 @@ export class InitializePortfolioUseCase {
         this.logger.info(
             "═══════════════════════════════════════════════════════════════",
         );
-        this.logger.info(
-            `✅ Portfolio initialized! Total spent: $${totalSpent.toFixed(2)} across ${this.config.assets.length} assets`,
+        this.logger.success(
+            `Portfolio initialized! Total spent: $${totalSpent.toFixed(2)} across ${this.config.assets.length} assets`,
         );
         this.logger.info(
             `   State saved. Next rebalance check in ${(this.config.rebalanceIntervalSeconds / 86400).toFixed(0)} days.`,

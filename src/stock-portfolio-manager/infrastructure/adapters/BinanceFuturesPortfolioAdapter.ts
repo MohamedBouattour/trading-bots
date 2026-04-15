@@ -12,6 +12,7 @@ import {
     TradeResult,
     SymbolConstraints,
 } from "../../application/ports/ITradeExecutor";
+import { ILogger } from "../../application/ports/ILogger";
 
 // ── Internal Binance type helpers ───────────────────────────────────────
 
@@ -44,13 +45,23 @@ export class BinanceFuturesPortfolioAdapter
     private timeOffset = 0;
     private isTimeSynced = false;
     private exchangeInfoCache: BinanceFuturesExchangeInfo | null = null;
+    private readonly logger: ILogger;
 
-    constructor(apiKey: string, apiSecret: string) {
+    constructor(apiKey: string, apiSecret: string, logger?: ILogger) {
         this.client = Binance({
             apiKey,
             apiSecret,
             getTime: () => Date.now() + this.timeOffset,
         });
+        // Default fallback logger that uses console directly
+        this.logger = logger ?? {
+            debug: (msg: string) => console.log(msg),
+            info: (msg: string) => console.log(msg),
+            success: (msg: string) => console.log(msg),
+            warn: (msg: string) => console.warn(msg),
+            error: (msg: string, err?: Error) => console.error(msg, err?.message ?? ""),
+            trade: (msg: string) => console.log(msg),
+        };
     }
 
     // ── Time Sync ────────────────────────────────────────────────────────
@@ -61,11 +72,11 @@ export class BinanceFuturesPortfolioAdapter
             const serverTime = await this.client.time();
             this.timeOffset = Number(serverTime) - Date.now();
             this.isTimeSynced = true;
-            console.log(
-                `[Binance] Time synced. Offset: ${this.timeOffset}ms`,
+            this.logger.debug(
+                `Time synced with Binance. Offset: ${this.timeOffset}ms`,
             );
         } catch {
-            console.warn("[Binance] Time sync failed, using local time.");
+            this.logger.warn("Binance time sync failed, using local clock.");
         }
     }
 
@@ -163,8 +174,8 @@ export class BinanceFuturesPortfolioAdapter
             );
         }
 
-        console.log(
-            `[Futures] ${side} ${quantity} ${symbol} @ ~$${price.toFixed(2)} (notional: $${amountUSDT.toFixed(2)})`,
+        this.logger.trade(
+            `${side} ${quantity} ${symbol} @ ~$${price.toFixed(2)} (notional: $${amountUSDT.toFixed(2)})`,
         );
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -198,12 +209,13 @@ export class BinanceFuturesPortfolioAdapter
         await this.ensureTimeSync();
         try {
             await this.client.futuresLeverage({ symbol, leverage });
-            console.log(
-                `[Futures] Leverage set to ${leverage}x for ${symbol}`,
+            this.logger.debug(
+                `Leverage set to ${leverage}x for ${symbol}`,
             );
-        } catch (error) {
-            console.error(
-                `[Futures] Failed to set leverage for ${symbol}:`,
+        } catch (err) {
+            const error = err instanceof Error ? err : new Error(String(err));
+            this.logger.error(
+                `Failed to set leverage for ${symbol}`,
                 error,
             );
         }

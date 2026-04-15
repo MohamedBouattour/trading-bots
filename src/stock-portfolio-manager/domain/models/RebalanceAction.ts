@@ -1,7 +1,8 @@
 export type RebalanceReason =
     | "DRIFT_REBALANCE"
     | "PROFIT_HARVEST"
-    | "REDISTRIBUTION";
+    | "REDISTRIBUTION"
+    | "COMPOUND_INVEST";
 
 export interface RebalanceAction {
     /** Binance symbol */
