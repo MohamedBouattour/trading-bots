@@ -116,10 +116,16 @@ async function main(): Promise<void> {
     }
 
     const modeLabel = config.dryRun ? "DRY RUN" : "LIVE";
-    const compoundLabel = (config.compoundThresholdUSDT ?? 10) > 0
-        ? `Compound: ≥$${config.compoundThresholdUSDT ?? 10}`
-        : "Compound: OFF";
+    const compoundLabel = (config.compoundThresholdUSDT ?? 10) >= 999999
+        ? "Compound: OFF"
+        : `Compound: ≥$${config.compoundThresholdUSDT ?? 10}`;
     const scaleLabel = config.autoScale !== false ? "Auto-Scale: ON" : "Auto-Scale: OFF";
+    const roiHarvestLabel = (config.portfolioRoiHarvestPct ?? 0) > 0
+        ? `ROI-Harvest: ≥+${config.portfolioRoiHarvestPct}%`
+        : "ROI-Harvest: OFF";
+    const marginLabel = (config.minFreeMarginUSDT ?? 0) > 0
+        ? `Min-Margin: $${config.minFreeMarginUSDT}`
+        : "Min-Margin: OFF";
 
     logger.info(
         "═══════════════════════════════════════════════════════════════",
@@ -130,7 +136,10 @@ async function main(): Promise<void> {
     logger.info(
         `   Interval: ${(config.rebalanceIntervalSeconds / 86400).toFixed(0)}d | ` +
         `Drift: ±${config.driftThresholdPct}% | Harvest: ${config.profitHarvestCeilingPct}% | ` +
-        `${compoundLabel} | ${scaleLabel}`,
+        `Buffer: +${config.profitHarvestBufferPct ?? 0}% | ${roiHarvestLabel} | ${marginLabel}`,
+    );
+    logger.info(
+        `   ${compoundLabel} | ${scaleLabel}`,
     );
     logger.info(
         "═══════════════════════════════════════════════════════════════",

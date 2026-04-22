@@ -10,10 +10,31 @@ export interface PortfolioConfig {
     totalBalanceUSDT: number;
     /** Array of asset configurations */
     assets: AssetConfig[];
-    /** Drift threshold in absolute percentage points (e.g. 10 means ±10%) */
+    /** Drift threshold in absolute percentage points (e.g. 3 means ±3%) */
     driftThresholdPct: number;
     /** Profit harvest ceiling – auto-sell if any asset exceeds this % of portfolio */
     profitHarvestCeilingPct: number;
+    /**
+     * Per-asset relative harvest buffer.
+     * Triggers a harvest if any asset's weight exceeds (targetWeight*100 + bufferPct).
+     * E.g. with buffer=8, MUUSDT (25% target) harvests at >33%.
+     * Set to 0 to disable.
+     */
+    profitHarvestBufferPct?: number;
+    /**
+     * Portfolio-level ROI harvest threshold (%).
+     * When total portfolio ROI >= this value, a partial harvest of all positions is triggered,
+     * selling a proportional slice of each position to lock in gains as free margin.
+     * E.g. 25 means: harvest when portfolio is up +25% from initial value.
+     * Set to 0 to disable.
+     */
+    portfolioRoiHarvestPct?: number;
+    /**
+     * Minimum free margin to keep as a safety buffer (actual USDT, not notional).
+     * Compound buys will not spend below this floor.
+     * Default: 0 (no floor).
+     */
+    minFreeMarginUSDT?: number;
     /** How often (seconds) the bot checks the portfolio. Default: 2592000 (30 days) */
     rebalanceIntervalSeconds: number;
     /** Leverage for futures positions. 1 = spot-like */
@@ -69,6 +90,36 @@ export function validatePortfolioConfig(config: PortfolioConfig): string[] {
     if (config.profitHarvestCeilingPct / 100 <= maxWeight) {
         errors.push(
             `profitHarvestCeilingPct (${config.profitHarvestCeilingPct}%) must be greater than the highest target weight (${(maxWeight * 100).toFixed(1)}%)`,
+        );
+    }
+
+    // profitHarvestBufferPct
+    if (
+        config.profitHarvestBufferPct !== undefined &&
+        (config.profitHarvestBufferPct < 0 || config.profitHarvestBufferPct > 50)
+    ) {
+        errors.push(
+            `profitHarvestBufferPct must be between 0 and 50 (got ${config.profitHarvestBufferPct})`,
+        );
+    }
+
+    // portfolioRoiHarvestPct
+    if (
+        config.portfolioRoiHarvestPct !== undefined &&
+        config.portfolioRoiHarvestPct < 0
+    ) {
+        errors.push(
+            `portfolioRoiHarvestPct must be >= 0 (got ${config.portfolioRoiHarvestPct})`,
+        );
+    }
+
+    // minFreeMarginUSDT
+    if (
+        config.minFreeMarginUSDT !== undefined &&
+        config.minFreeMarginUSDT < 0
+    ) {
+        errors.push(
+            `minFreeMarginUSDT must be >= 0 (got ${config.minFreeMarginUSDT})`,
         );
     }
 

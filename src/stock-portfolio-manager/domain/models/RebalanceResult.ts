@@ -12,8 +12,10 @@ export interface RebalanceResult {
     totalFeesEstimated: number;
     /** Whether drift-based rebalancing was triggered */
     rebalanceTriggered: boolean;
-    /** Whether profit-harvest was triggered */
+    /** Whether profit-harvest was triggered (per-asset ceiling or buffer exceeded) */
     profitHarvestTriggered: boolean;
+    /** Whether portfolio-level ROI harvest was triggered */
+    portfolioRoiHarvestTriggered: boolean;
     /** Whether compound investment was triggered (free cash deployed) */
     compoundTriggered: boolean;
     /** Whether auto-scale updated the totalBalanceUSDT */

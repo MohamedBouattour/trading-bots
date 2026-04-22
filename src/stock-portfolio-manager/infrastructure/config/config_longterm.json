@@ -1,19 +1,22 @@
 {
   "totalBalanceUSDT": 1184.28,
   "assets": [
-    { "symbol": "MUUSDT", "targetWeight": 0.25 },
-    { "symbol": "TSMUSDT", "targetWeight": 0.2 },
+    { "symbol": "MUUSDT",    "targetWeight": 0.25 },
+    { "symbol": "TSMUSDT",   "targetWeight": 0.2 },
     { "symbol": "GOOGLUSDT", "targetWeight": 0.2 },
-    { "symbol": "NVDAUSDT", "targetWeight": 0.2 },
-    { "symbol": "AAPLUSDT", "targetWeight": 0.15 }
+    { "symbol": "NVDAUSDT",  "targetWeight": 0.2 },
+    { "symbol": "AAPLUSDT",  "targetWeight": 0.15 }
   ],
-  "driftThresholdPct": 5,
+  "driftThresholdPct": 3,
   "profitHarvestCeilingPct": 35,
+  "profitHarvestBufferPct": 8,
+  "portfolioRoiHarvestPct": 25,
+  "minFreeMarginUSDT": 50,
   "rebalanceIntervalSeconds": 604800,
   "leverage": 3,
   "useFutures": true,
   "dryRun": false,
   "feePct": 0.04,
-  "compoundThresholdUSDT": 10,
+  "compoundThresholdUSDT": 999999,
   "autoScale": true
 }

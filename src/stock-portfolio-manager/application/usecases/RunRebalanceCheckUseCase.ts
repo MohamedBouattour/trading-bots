@@ -61,13 +61,28 @@ export class RunRebalanceCheckUseCase {
         this.logPortfolioDashboard(snapshot, state);
 
         // ── 4. Run rebalancing engine ──────────────────────────────────────
-        const result = this.engine.analyzePortfolio(snapshot, this.config);
+        const initialValueUSDT =
+            state?.initialPortfolioValueUSDT ??
+            this.config.totalBalanceUSDT;
+        const result = this.engine.analyzePortfolio(
+            snapshot,
+            this.config,
+            initialValueUSDT,
+        );
         this.logger.info(result.summary);
 
         // Log auto-scale and compound details
         if (result.autoScaleApplied) {
             this.logger.info(
                 `🔄 AUTO-SCALE: Portfolio value ($${snapshot.totalValueUSDT.toFixed(2)}) exceeds config ($${this.config.totalBalanceUSDT.toFixed(2)}). Targets recalculated.`,
+            );
+        }
+        if (result.portfolioRoiHarvestTriggered) {
+            const roiActions = result.actions.filter((a) => a.reason === "ROI_HARVEST");
+            const totalSold = roiActions.reduce((s, a) => s + a.amountUSDT, 0);
+            const roi = ((snapshot.totalValueUSDT - initialValueUSDT) / initialValueUSDT) * 100;
+            this.logger.info(
+                `💰 ROI HARVEST: Portfolio at +${roi.toFixed(1)}% ROI (threshold: +${this.config.portfolioRoiHarvestPct ?? 0}%). Selling 20% of each position — $${totalSold.toFixed(2)} total.`,
             );
         }
         if (result.compoundTriggered) {
