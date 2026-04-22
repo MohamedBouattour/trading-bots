@@ -13,7 +13,7 @@
   "portfolioRoiHarvestPct": 25,
   "minFreeMarginUSDT": 50,
   "rebalanceIntervalSeconds": 604800,
-  "leverage": 3,
+  "leverage": 4,
   "useFutures": true,
   "dryRun": false,
   "feePct": 0.04,

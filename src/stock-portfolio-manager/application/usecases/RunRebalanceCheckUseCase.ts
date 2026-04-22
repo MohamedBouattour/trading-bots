@@ -80,7 +80,8 @@ export class RunRebalanceCheckUseCase {
         if (result.portfolioRoiHarvestTriggered) {
             const roiActions = result.actions.filter((a) => a.reason === "ROI_HARVEST");
             const totalSold = roiActions.reduce((s, a) => s + a.amountUSDT, 0);
-            const roi = ((snapshot.totalValueUSDT - initialValueUSDT) / initialValueUSDT) * 100;
+            const activePositions = snapshot.allocations.reduce((s, a) => s + a.currentValueUSDT, 0);
+            const roi = ((activePositions - initialValueUSDT) / initialValueUSDT) * 100;
             this.logger.info(
                 `💰 ROI HARVEST: Portfolio at +${roi.toFixed(1)}% ROI (threshold: +${this.config.portfolioRoiHarvestPct ?? 0}%). Selling 20% of each position — $${totalSold.toFixed(2)} total.`,
             );

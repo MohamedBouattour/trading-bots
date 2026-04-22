@@ -63,33 +63,43 @@ export class RebalancingEngine {
         let compoundTriggered = false;
         let autoScaleApplied = false;
 
+        // Active positions total: sum of all position notionals ONLY.
+        // MUST exclude freeUSDT × leverage — after a harvest free cash swells and
+        // would otherwise inflate targets causing drift to buy everything back.
+        const activePositionsNotional = snapshot.allocations.reduce(
+            (sum, a) => sum + a.currentValueUSDT, 0,
+        );
+
         // ── Step 0: Auto-Scale ──────────────────────────────────────────────
-        // If actual portfolio value exceeds configured totalBalanceUSDT,
-        // scale up so all target calculations use the real value.
+        // Scale only when positions themselves have grown past config baseline.
+        // Using activePositionsNotional (not totalValueUSDT) prevents free-cash
+        // from triggering auto-scale and inflating drift targets after a harvest.
         const effectiveConfig = { ...config };
-        if (config.autoScale !== false && snapshot.totalValueUSDT > config.totalBalanceUSDT) {
-            // Cap auto-scale at 2× initial value per cycle to prevent runaway scaling
+        if (config.autoScale !== false && activePositionsNotional > config.totalBalanceUSDT) {
             const maxScale = config.totalBalanceUSDT * 2;
             effectiveConfig.totalBalanceUSDT = Math.min(
-                snapshot.totalValueUSDT,
+                activePositionsNotional,
                 maxScale,
             );
             autoScaleApplied = true;
         }
 
         // ── Step 1: Portfolio-Level ROI Harvest ─────────────────────────────
-        // If total portfolio ROI >= portfolioRoiHarvestPct, sell a fixed slice
-        // of every position to lock in gains as free margin.
+        // When total ROI >= threshold, trim each asset back to its original
+        // baseline size (initialValue × targetWeight). Only sells the excess —
+        // won't re-fire after one harvest until prices grow again.
         const roiThreshold = effectiveConfig.portfolioRoiHarvestPct ?? 0;
         if (roiThreshold > 0 && initialValueUSDT && initialValueUSDT > 0) {
+            // ROI = growth of active positions only (excludes free cash from prior harvests)
             const currentRoi =
-                ((snapshot.totalValueUSDT - initialValueUSDT) / initialValueUSDT) * 100;
+                ((activePositionsNotional - initialValueUSDT) / initialValueUSDT) * 100;
 
             if (currentRoi >= roiThreshold) {
                 const roiHarvestActions = this.calculatePortfolioRoiHarvestActions(
                     snapshot.allocations,
                     currentRoi,
                     roiThreshold,
+                    initialValueUSDT,
                 );
                 if (roiHarvestActions.length > 0) {
                     portfolioRoiHarvestTriggered = true;
@@ -99,9 +109,6 @@ export class RebalancingEngine {
         }
 
         // ── Step 2: Per-Asset Profit Harvest ────────────────────────────────
-        // Detect assets that exceed either:
-        //   a) The absolute ceiling (profitHarvestCeilingPct, e.g. 35%)
-        //   b) The relative buffer (targetWeight + profitHarvestBufferPct, e.g. 25+8=33%)
         const harvestTargets = this.detectProfitHarvest(
             snapshot.allocations,
             effectiveConfig.profitHarvestCeilingPct,
@@ -114,50 +121,51 @@ export class RebalancingEngine {
                 harvestTargets,
                 snapshot.allocations,
                 effectiveConfig,
-                snapshot.totalValueUSDT,
+                activePositionsNotional,
             );
             allActions.push(...harvestActions);
         }
 
         // ── Step 3: Drift Detection ─────────────────────────────────────────
-        // Exclude assets already handled by profit harvest or ROI harvest
-        const handledSymbols = new Set([
-            ...harvestTargets.map((a) => a.symbol),
-            ...allActions
-                .filter((a) => a.reason === "ROI_HARVEST")
-                .map((a) => a.symbol),
-        ]);
-        const remainingAllocations = snapshot.allocations.filter(
-            (a) => !handledSymbols.has(a.symbol),
-        );
-
-        const driftedAssets = this.detectDrift(
-            remainingAllocations,
-            effectiveConfig.driftThresholdPct,
-        );
-
-        if (driftedAssets.length > 0) {
-            rebalanceTriggered = true;
-            const driftActions = this.calculateRebalanceActions(
-                driftedAssets,
-                effectiveConfig,
-                snapshot.totalValueUSDT,
+        // Skipped when any harvest fired — positions are intentionally at baseline;
+        // free cash is profit to keep, not working capital to redeploy.
+        if (!portfolioRoiHarvestTriggered && !profitHarvestTriggered) {
+            const handledSymbols = new Set(
+                allActions.filter((a) => a.reason === "ROI_HARVEST").map((a) => a.symbol),
             );
-            allActions.push(...driftActions);
+            const remainingAllocations = snapshot.allocations.filter(
+                (a) => !handledSymbols.has(a.symbol),
+            );
+
+            const driftedAssets = this.detectDrift(
+                remainingAllocations,
+                effectiveConfig.driftThresholdPct,
+            );
+
+            if (driftedAssets.length > 0) {
+                rebalanceTriggered = true;
+                const driftActions = this.calculateRebalanceActions(
+                    driftedAssets,
+                    effectiveConfig,
+                    activePositionsNotional,   // positions only — not inflated by free cash
+                );
+                allActions.push(...driftActions);
+            }
         }
 
         // ── Step 4: Compound Investment ─────────────────────────────────────
-        // Deploy free cash into underweight assets — respecting minFreeMarginUSDT buffer.
+        // Skipped if any harvest ran — don't redeploy freed gains immediately.
         const minFreeMargin = effectiveConfig.minFreeMarginUSDT ?? 0;
         const usableFreeUSDT = Math.max(0, snapshot.freeUSDT - minFreeMargin);
         const compoundThreshold = effectiveConfig.compoundThresholdUSDT ?? 10;
         const notionalFreeCash = usableFreeUSDT * effectiveConfig.leverage;
 
-        if (notionalFreeCash >= compoundThreshold) {
+        if (!portfolioRoiHarvestTriggered && !profitHarvestTriggered &&
+            notionalFreeCash >= compoundThreshold) {
             const compoundActions = this.calculateCompoundActions(
                 snapshot.allocations,
                 effectiveConfig,
-                snapshot.totalValueUSDT,
+                activePositionsNotional,       // positions only — not inflated by free cash
                 notionalFreeCash,
             );
             if (compoundActions.length > 0) {
@@ -222,39 +230,44 @@ export class RebalancingEngine {
     /**
      * When total portfolio ROI crosses the threshold, sell a fixed fraction of every position.
      * The fraction scales with how far ROI exceeds the threshold, capped at ROI_HARVEST_SELL_FRACTION.
+    /**
+     * ROI Harvest: trim each asset back to its ORIGINAL baseline size.
      *
-     * Example: threshold=25%, current ROI=31% → sell 20% of each position.
+     * Baseline for each asset = initialPortfolioValueUSDT × targetWeight
+     * Excess  = currentValueUSDT − baseline  (only positive values are sold)
+     *
+     * Example: initial $1000, MUUSDT 25% target → baseline $250.
+     *   If MUUSDT is now $320 → sell $70 excess, keep $250 active.
+     * After harvest every asset sits exactly at its original size,
+     * so the trigger will NOT re-fire until prices grow further.
      */
     calculatePortfolioRoiHarvestActions(
         allocations: AssetAllocation[],
         currentRoiPct: number,
         thresholdPct: number,
+        initialPortfolioValueUSDT: number,
     ): RebalanceAction[] {
         const actions: RebalanceAction[] = [];
 
         for (const asset of allocations) {
-            if (asset.currentValueUSDT < MIN_NOTIONAL_USDT) continue;
+            // What this position was worth at inception
+            const baselineValue = initialPortfolioValueUSDT * asset.targetWeight;
+            const excess = asset.currentValueUSDT - baselineValue;
 
-            const sellAmount = asset.currentValueUSDT * ROI_HARVEST_SELL_FRACTION;
-            if (sellAmount < MIN_NOTIONAL_USDT) continue;
+            // Only sell if there is meaningful excess above baseline
+            if (excess < MIN_NOTIONAL_USDT) continue;
 
             const quantityAsset =
-                asset.currentPrice > 0 ? sellAmount / asset.currentPrice : 0;
-            const expectedNewValue = asset.currentValueUSDT - sellAmount;
-            const expectedNewWeight =
-                expectedNewValue / asset.currentValueUSDT > 0
-                    ? (expectedNewValue / (asset.currentValueUSDT / asset.currentWeight)) *
-                      asset.currentWeight
-                    : 0;
+                asset.currentPrice > 0 ? excess / asset.currentPrice : 0;
 
             actions.push({
                 symbol: asset.symbol,
                 side: "SELL",
-                amountUSDT: sellAmount,
+                amountUSDT: excess,
                 quantityAsset,
                 reason: "ROI_HARVEST",
                 fromWeight: asset.currentWeight,
-                toWeight: expectedNewWeight,
+                toWeight: asset.targetWeight, // trimmed back to target
             });
         }
 
@@ -315,20 +328,23 @@ export class RebalancingEngine {
     ): RebalanceAction[] {
         const actions: RebalanceAction[] = [];
 
-        // Find underweight assets (current weight < target weight)
+        // The portfolio's target size after injecting this new cash
+        const targetPortfolioValue = totalPortfolioValue + notionalBudget;
+
+        // Find assets that are underweight relative to the NEW portfolio size
         const underweightAssets = allocations.filter(
-            (a) => a.currentWeight < a.targetWeight,
+            (a) => a.currentValueUSDT < targetPortfolioValue * a.targetWeight,
         );
 
         if (underweightAssets.length === 0) {
-            // All assets at or above target — distribute equally across all
+            // All assets at or above target even with new cash — distribute equally across all
             const perAsset = notionalBudget / allocations.length;
             for (const asset of allocations) {
                 if (perAsset < MIN_NOTIONAL_USDT) continue;
                 const quantityAsset =
                     asset.currentPrice > 0 ? perAsset / asset.currentPrice : 0;
                 const expectedNewValue = asset.currentValueUSDT + perAsset;
-                const expectedNewWeight = expectedNewValue / (totalPortfolioValue + notionalBudget);
+                const expectedNewWeight = expectedNewValue / targetPortfolioValue;
 
                 actions.push({
                     symbol: asset.symbol,
@@ -343,16 +359,16 @@ export class RebalancingEngine {
             return actions;
         }
 
-        // Calculate total deficit for pro-rata distribution
+        // Calculate total deficit for pro-rata distribution against the NEW size
         const totalDeficit = underweightAssets.reduce((sum, a) => {
-            const targetValue = totalPortfolioValue * a.targetWeight;
+            const targetValue = targetPortfolioValue * a.targetWeight;
             return sum + Math.max(0, targetValue - a.currentValueUSDT);
         }, 0);
 
         if (totalDeficit <= 0) return actions;
 
         for (const asset of underweightAssets) {
-            const targetValue = totalPortfolioValue * asset.targetWeight;
+            const targetValue = targetPortfolioValue * asset.targetWeight;
             const deficit = Math.max(0, targetValue - asset.currentValueUSDT);
             if (deficit < MIN_NOTIONAL_USDT) continue;
 
