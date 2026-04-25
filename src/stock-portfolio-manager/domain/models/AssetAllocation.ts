@@ -15,4 +15,6 @@ export interface AssetAllocation {
     currentPrice: number;
     /** Drift in absolute percentage points: (currentWeight - targetWeight) × 100 */
     driftPct: number;
+    /** Unrealized PnL percentage (price change × leverage) */
+    unrealizedPnlPct?: number;
 }

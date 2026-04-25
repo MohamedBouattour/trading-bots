@@ -113,6 +113,7 @@ export class RebalancingEngine {
             snapshot.allocations,
             effectiveConfig.profitHarvestCeilingPct,
             effectiveConfig.profitHarvestBufferPct ?? 0,
+            effectiveConfig.assetProfitHarvestPct ?? 0,
         );
 
         if (harvestTargets.length > 0) {
@@ -301,6 +302,7 @@ export class RebalancingEngine {
         allocations: AssetAllocation[],
         ceilingPct: number,
         bufferPct = 0,
+        assetProfitHarvestPct = 0,
     ): AssetAllocation[] {
         const ceilingDecimal = ceilingPct / 100;
         return allocations.filter((a) => {
@@ -308,7 +310,11 @@ export class RebalancingEngine {
             const relativeTriggered =
                 bufferPct > 0 &&
                 a.currentWeight > a.targetWeight + bufferPct / 100;
-            return absoluteTriggered || relativeTriggered;
+            const pnlTriggered =
+                assetProfitHarvestPct > 0 &&
+                (a.unrealizedPnlPct ?? 0) >= assetProfitHarvestPct;
+            
+            return absoluteTriggered || relativeTriggered || pnlTriggered;
         });
     }
 

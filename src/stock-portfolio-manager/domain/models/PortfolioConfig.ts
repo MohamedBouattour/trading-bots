@@ -22,6 +22,11 @@ export interface PortfolioConfig {
      */
     profitHarvestBufferPct?: number;
     /**
+     * Target Asset PnL percentage for harvest.
+     * When an asset's unrealized PnL exceeds this percentage, the bot sells the excess to return it to the Target Ratio.
+     */
+    assetProfitHarvestPct?: number;
+    /**
      * Portfolio-level ROI harvest threshold (%).
      * When total portfolio ROI >= this value, a partial harvest of all positions is triggered,
      * selling a proportional slice of each position to lock in gains as free margin.

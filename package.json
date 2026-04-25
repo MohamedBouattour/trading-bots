@@ -6,6 +6,7 @@
   "scripts": {
     "build": "esbuild src/momentum-sniper/presentation/cli/run_bot.ts --bundle --platform=node --outfile=dist/momentum-sniper.js",
     "build:rebalancer": "esbuild src/stock-portfolio-manager/presentation/cli/run_rebalancer.ts --bundle --platform=node --outfile=dist/rebalancer.js",
+    "build:dashboard": "cd dashboard && npm run build",
     "backtest": "ts-node src/momentum-sniper/presentation/cli/backtest_cli.ts",
     "rebalancer": "ts-node src/stock-portfolio-manager/presentation/cli/run_rebalancer.ts",
     "rebalancer:loop": "ts-node src/stock-portfolio-manager/presentation/cli/run_rebalancer.ts --loop",

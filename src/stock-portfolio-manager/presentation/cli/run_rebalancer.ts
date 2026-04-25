@@ -127,6 +127,10 @@ async function main(): Promise<void> {
         ? `Min-Margin: $${config.minFreeMarginUSDT}`
         : "Min-Margin: OFF";
 
+    const assetHarvestLabel = (config.assetProfitHarvestPct ?? 0) > 0
+        ? `Asset-Harvest: ≥+${config.assetProfitHarvestPct}%`
+        : "Asset-Harvest: OFF";
+
     logger.info(
         "═══════════════════════════════════════════════════════════════",
     );
@@ -135,8 +139,9 @@ async function main(): Promise<void> {
     );
     logger.info(
         `   Interval: ${(config.rebalanceIntervalSeconds / 86400).toFixed(0)}d | ` +
-        `Drift: ±${config.driftThresholdPct}% | Harvest: ${config.profitHarvestCeilingPct}% | ` +
-        `Buffer: +${config.profitHarvestBufferPct ?? 0}% | ${roiHarvestLabel} | ${marginLabel}`,
+        `Drift: ±${config.driftThresholdPct}% | ${assetHarvestLabel} | ` +
+        `Ceil: ${config.profitHarvestCeilingPct}% | Buffer: +${config.profitHarvestBufferPct ?? 0}% | ` +
+        `${roiHarvestLabel} | ${marginLabel}`,
     );
     logger.info(
         `   ${compoundLabel} | ${scaleLabel}`,

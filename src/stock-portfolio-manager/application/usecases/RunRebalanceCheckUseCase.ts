@@ -255,11 +255,12 @@ export class RunRebalanceCheckUseCase {
         const effectiveFreeUSDT = freeUSDT * this.config.leverage;
         const totalValueUSDT = totalPositionValue + effectiveFreeUSDT;
 
-        // Calculate weights, target values, and drift
+        // Calculate weights, target values, and drift based ONLY on active positions (Invested Capital)
+        // This ensures harvested profits (free cash) are ignored and don't skew the asset drift
         for (const alloc of allocations) {
             alloc.currentWeight =
-                totalValueUSDT > 0 ? alloc.currentValueUSDT / totalValueUSDT : 0;
-            alloc.targetValueUSDT = totalValueUSDT * alloc.targetWeight;
+                totalPositionValue > 0 ? alloc.currentValueUSDT / totalPositionValue : 0;
+            alloc.targetValueUSDT = totalPositionValue * alloc.targetWeight;
             alloc.driftPct =
                 (alloc.currentWeight - alloc.targetWeight) * 100;
         }

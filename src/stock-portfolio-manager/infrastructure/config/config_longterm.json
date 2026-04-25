@@ -7,7 +7,8 @@
     { "symbol": "NVDAUSDT",  "targetWeight": 0.2 },
     { "symbol": "AAPLUSDT",  "targetWeight": 0.15 }
   ],
-  "driftThresholdPct": 3,
+  "driftThresholdPct": 10,
+  "assetProfitHarvestPct": 15,
   "profitHarvestCeilingPct": 35,
   "profitHarvestBufferPct": 8,
   "portfolioRoiHarvestPct": 25,
