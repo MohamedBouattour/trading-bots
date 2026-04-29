@@ -1,5 +1,5 @@
 {
-  "totalBalanceUSDT": 1184.28,
+  "totalBalanceUSDT": 1284.28,
   "assets": [
     { "symbol": "MUUSDT",    "targetWeight": 0.25 },
     { "symbol": "TSMUSDT",   "targetWeight": 0.2 },
@@ -12,12 +12,13 @@
   "profitHarvestCeilingPct": 35,
   "profitHarvestBufferPct": 8,
   "portfolioRoiHarvestPct": 25,
-  "minFreeMarginUSDT": 50,
+  "securityReservePct": 0.33,
+  "minFreeMarginUSDT": 115.50,
   "rebalanceIntervalSeconds": 604800,
   "leverage": 4,
   "useFutures": true,
   "dryRun": false,
   "feePct": 0.04,
-  "compoundThresholdUSDT": 999999,
+  "compoundThresholdUSDT": 50,
   "autoScale": true
 }

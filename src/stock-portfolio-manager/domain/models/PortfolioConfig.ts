@@ -35,8 +35,18 @@ export interface PortfolioConfig {
      */
     portfolioRoiHarvestPct?: number;
     /**
+     * Security reserve as a fraction of current free USDT (e.g. 0.33 = 33%).
+     * When set, minFreeMarginUSDT is computed dynamically each cycle as:
+     *   minFreeMarginUSDT = freeUSDT * securityReservePct
+     * This overrides the static minFreeMarginUSDT if both are provided.
+     * Recommended: 0.33 — always keep 33% of free USDT untouched as a
+     * rebalancing buffer and emergency cushion.
+     */
+    securityReservePct?: number;
+    /**
      * Minimum free margin to keep as a safety buffer (actual USDT, not notional).
      * Compound buys will not spend below this floor.
+     * When securityReservePct is set, this value is overridden dynamically.
      * Default: 0 (no floor).
      */
     minFreeMarginUSDT?: number;
@@ -115,6 +125,16 @@ export function validatePortfolioConfig(config: PortfolioConfig): string[] {
     ) {
         errors.push(
             `portfolioRoiHarvestPct must be >= 0 (got ${config.portfolioRoiHarvestPct})`,
+        );
+    }
+
+    // securityReservePct
+    if (
+        config.securityReservePct !== undefined &&
+        (config.securityReservePct < 0 || config.securityReservePct >= 1)
+    ) {
+        errors.push(
+            `securityReservePct must be between 0 and 1 exclusive (got ${config.securityReservePct})`,
         );
     }
 

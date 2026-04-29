@@ -23,8 +23,29 @@ const ROI_HARVEST_SELL_FRACTION = 0.20;
  *  3. Per-Asset Profit Harvest: sell excess from assets > (target + buffer) weight
  *  4. Drift Rebalance:         correct assets that drifted beyond ±driftThresholdPct
  *  5. Compound Investment:     deploy free cash >= threshold into underweight assets
+ *
+ * Security Reserve (33% rule):
+ *  When config.securityReservePct is set, minFreeMarginUSDT is computed dynamically
+ *  each cycle as freeUSDT * securityReservePct, ensuring the bot never deploys
+ *  more than (1 - securityReservePct) of available free cash.
  */
 export class RebalancingEngine {
+
+    /**
+     * Resolve the effective minimum free margin floor for this cycle.
+     *
+     * Priority:
+     *  1. securityReservePct (dynamic): floor = freeUSDT × securityReservePct
+     *  2. minFreeMarginUSDT  (static) : floor = fixed USDT amount
+     *  3. 0 (no floor)
+     */
+    private resolveMinFreeMargin(freeUSDT: number, config: PortfolioConfig): number {
+        if (config.securityReservePct !== undefined && config.securityReservePct > 0) {
+            return freeUSDT * config.securityReservePct;
+        }
+        return config.minFreeMarginUSDT ?? 0;
+    }
+
     /**
      * Main entry point: analyze a portfolio snapshot and produce a RebalanceResult
      * describing all necessary actions.
@@ -62,6 +83,12 @@ export class RebalancingEngine {
         let rebalanceTriggered = false;
         let compoundTriggered = false;
         let autoScaleApplied = false;
+
+        // ── Resolve security reserve floor for this cycle ──────────────────
+        // Dynamic 33% floor: always computed fresh from current freeUSDT so
+        // the floor scales up as the balance grows (never stale).
+        const minFreeMargin = this.resolveMinFreeMargin(snapshot.freeUSDT, config);
+        const usableFreeUSDT = Math.max(0, snapshot.freeUSDT - minFreeMargin);
 
         // Active positions total: sum of all position notionals ONLY.
         // MUST exclude freeUSDT × leverage — after a harvest free cash swells and
@@ -156,8 +183,8 @@ export class RebalancingEngine {
 
         // ── Step 4: Compound Investment ─────────────────────────────────────
         // Skipped if any harvest ran — don't redeploy freed gains immediately.
-        const minFreeMargin = effectiveConfig.minFreeMarginUSDT ?? 0;
-        const usableFreeUSDT = Math.max(0, snapshot.freeUSDT - minFreeMargin);
+        // Uses usableFreeUSDT (already minus security reserve) so the 33% floor
+        // is always respected before any compound buy is calculated.
         const compoundThreshold = effectiveConfig.compoundThresholdUSDT ?? 10;
         const notionalFreeCash = usableFreeUSDT * effectiveConfig.leverage;
 
@@ -180,6 +207,7 @@ export class RebalancingEngine {
             allActions,
             snapshot.freeUSDT,
             effectiveConfig,
+            minFreeMargin,
         );
 
         // ── Step 6: Filter below minimum notional ────────────────────────────
@@ -210,6 +238,7 @@ export class RebalancingEngine {
             compoundTriggered,
             autoScaleApplied,
             initialValueUSDT,
+            minFreeMargin,
         );
 
         return {
@@ -228,9 +257,6 @@ export class RebalancingEngine {
 
     // ── Portfolio ROI Harvest ──────────────────────────────────────────────
 
-    /**
-     * When total portfolio ROI crosses the threshold, sell a fixed fraction of every position.
-     * The fraction scales with how far ROI exceeds the threshold, capped at ROI_HARVEST_SELL_FRACTION.
     /**
      * ROI Harvest: trim each asset back to its ORIGINAL baseline size.
      *
@@ -313,7 +339,7 @@ export class RebalancingEngine {
             const pnlTriggered =
                 assetProfitHarvestPct > 0 &&
                 (a.unrealizedPnlPct ?? 0) >= assetProfitHarvestPct;
-            
+
             return absoluteTriggered || relativeTriggered || pnlTriggered;
         });
     }
@@ -325,6 +351,7 @@ export class RebalancingEngine {
      * into underweight assets pro-rata by deficit.
      *
      * If all assets are at or above target, distribute equally.
+     * Budget is already net of the security reserve (usableFreeUSDT × leverage).
      */
     calculateCompoundActions(
         allocations: AssetAllocation[],
@@ -532,12 +559,14 @@ export class RebalancingEngine {
 
     /**
      * Ensure total BUY amounts don't exceed total SELL proceeds + usable free USDT.
+     * Respects the already-computed minFreeMargin floor (security reserve).
      * If they do, scale down BUY actions proportionally.
      */
     private balanceBudget(
         actions: RebalanceAction[],
         freeUSDT: number,
         config: PortfolioConfig,
+        minFreeMargin: number,
     ): RebalanceAction[] {
         const totalSells = actions
             .filter((a) => a.side === "SELL")
@@ -546,8 +575,7 @@ export class RebalancingEngine {
             .filter((a) => a.side === "BUY")
             .reduce((sum, a) => sum + a.amountUSDT, 0);
 
-        // Respect minFreeMarginUSDT — don't count that portion as available
-        const minFreeMargin = config.minFreeMarginUSDT ?? 0;
+        // Respect security reserve floor — don't count that portion as available
         const usableFreeUSDT = Math.max(0, freeUSDT - minFreeMargin);
 
         // Effective available funds for notional buys = total notional sells + (usable margin * leverage)
@@ -588,6 +616,7 @@ export class RebalancingEngine {
         compoundTriggered: boolean,
         autoScaleApplied: boolean,
         initialValueUSDT?: number,
+        minFreeMargin?: number,
     ): string {
         const lines: string[] = [];
 
@@ -603,6 +632,16 @@ export class RebalancingEngine {
         lines.push(
             `Portfolio Value: $${snapshot.totalValueUSDT.toFixed(2)}${roiStr} | Free USDT: $${snapshot.freeUSDT.toFixed(2)}`,
         );
+
+        // Security reserve info
+        if (minFreeMargin !== undefined && minFreeMargin > 0) {
+            const reservePct = config.securityReservePct
+                ? `${(config.securityReservePct * 100).toFixed(0)}% dynamic`
+                : "static";
+            lines.push(
+                `🔒 Security reserve: $${minFreeMargin.toFixed(2)} (${reservePct}) | Investable: $${Math.max(0, snapshot.freeUSDT - minFreeMargin).toFixed(2)}`,
+            );
+        }
 
         if (autoScaleApplied) {
             lines.push(
