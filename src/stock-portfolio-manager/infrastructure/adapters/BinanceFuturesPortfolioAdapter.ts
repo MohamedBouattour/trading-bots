@@ -186,8 +186,12 @@ export class BinanceFuturesPortfolioAdapter
             quantity,
         });
 
-        const executedQty = parseFloat(orderResult.executedQty || quantity);
-        const avgPrice = parseFloat(orderResult.avgPrice || String(price));
+        const executedQty = parseFloat(orderResult.executedQty || orderResult.cumQty || "0");
+        const avgPrice = parseFloat(orderResult.avgPrice || orderResult.price || String(price));
+
+        if (executedQty === 0) {
+            this.logger.error(`Trade executed but returned 0 quantity. Full response: ${JSON.stringify(orderResult)}`);
+        }
 
         return {
             orderId: String(orderResult.orderId || "unknown"),
@@ -195,13 +199,8 @@ export class BinanceFuturesPortfolioAdapter
             side,
             executedQty,
             executedPrice: avgPrice,
-            commission: amountUSDT * 0.0004, // Estimated 0.04% taker fee
-            status:
-                orderResult.status === "FILLED"
-                    ? "FILLED"
-                    : orderResult.status === "PARTIALLY_FILLED"
-                        ? "PARTIALLY_FILLED"
-                        : "FILLED", // Default to FILLED for market orders
+            commission: amountUSDT * 0.0004,
+            status: orderResult.status || "FILLED",
         };
     }
 
