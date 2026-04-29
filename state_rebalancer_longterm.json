@@ -1,0 +1,1053 @@
+{
+  "version": "1.0.0",
+  "lastCheckTimestamp": 1777475427978,
+  "lastRebalanceTimestamp": 1777475427978,
+  "totalRebalanceCount": 68,
+  "rebalanceHistory": [
+    {
+      "timestamp": 1777446002955,
+      "snapshotBefore": {
+        "timestamp": 1777446002953,
+        "totalValueUSDT": 2218.54006572,
+        "freeUSDT": 254.01419143,
+        "allocations": [
+          {
+            "symbol": "MUUSDT",
+            "targetWeight": 0.25,
+            "currentWeight": 0.25050077618541566,
+            "currentValueUSDT": 301.223,
+            "targetValueUSDT": 300.62082499999997,
+            "positionQty": 0.58,
+            "currentPrice": 519.35,
+            "driftPct": 0.05007761854156634,
+            "unrealizedPnlPct": 35.48734381988456
+          },
+          {
+            "symbol": "TSMUSDT",
+            "targetWeight": 0.2,
+            "currentWeight": 0.19942838291392487,
+            "currentValueUSDT": 239.80929999999998,
+            "targetValueUSDT": 240.49666,
+            "positionQty": 0.61,
+            "currentPrice": 393.13,
+            "driftPct": -0.05716170860751435,
+            "unrealizedPnlPct": 10.400358645161392
+          },
+          {
+            "symbol": "GOOGLUSDT",
+            "targetWeight": 0.2,
+            "currentWeight": 0.19873240651242313,
+            "currentValueUSDT": 238.97240000000002,
+            "targetValueUSDT": 240.49666,
+            "positionQty": 0.68,
+            "currentPrice": 351.43,
+            "driftPct": -0.1267593487576879,
+            "unrealizedPnlPct": 19.428886816588115
+          },
+          {
+            "symbol": "NVDAUSDT",
+            "targetWeight": 0.2,
+            "currentWeight": 0.20077160323141288,
+            "currentValueUSDT": 241.4245,
+            "targetValueUSDT": 240.49666,
+            "positionQty": 1.13,
+            "currentPrice": 213.65,
+            "driftPct": 0.07716032314128707,
+            "unrealizedPnlPct": 29.115296126843344
+          },
+          {
+            "symbol": "AAPLUSDT",
+            "targetWeight": 0.15,
+            "currentWeight": 0.1505668311568236,
+            "currentValueUSDT": 181.05410000000003,
+            "targetValueUSDT": 180.372495,
+            "positionQty": 0.67,
+            "currentPrice": 270.23,
+            "driftPct": 0.05668311568235995,
+            "unrealizedPnlPct": 0.06274838117285299
+          }
+        ],
+        "isBalanced": true
+      },
+      "actions": [],
+      "totalFeesEstimated": 0,
+      "rebalanceTriggered": false,
+      "profitHarvestTriggered": true,
+      "portfolioRoiHarvestTriggered": false,
+      "compoundTriggered": false,
+      "autoScaleApplied": true,
+      "summary": "Portfolio Value: $2218.54 | Total ROI: +87.9% | Free USDT: $254.01 | Auto-scaled totalBalance to $1202.48 | Profit harvest triggered: 0 sell(s) totaling $0.00 | Actions: 0 sell(s), 0 buy(s) across 0 total order(s)"
+    },
+    {
+      "timestamp": 1777449603955,
+      "snapshotBefore": {
+        "timestamp": 1777449603954,
+        "totalValueUSDT": 2208.7884043599997,
+        "freeUSDT": 252.00192609,
+        "allocations": [
+          {
+            "symbol": "MUUSDT",
+            "targetWeight": 0.25,
+            "currentWeight": 0.25015075608726894,
+            "currentValueUSDT": 300.3762,
+            "targetValueUSDT": 300.19517499999995,
+            "positionQty": 0.58,
+            "currentPrice": 517.89,
+            "driftPct": 0.015075608726894396,
+            "unrealizedPnlPct": 34.26309904857995
+          },
+          {
+            "symbol": "TSMUSDT",
+            "targetWeight": 0.2,
+            "currentWeight": 0.1995790738475394,
+            "currentValueUSDT": 239.6507,
+            "targetValueUSDT": 240.15613999999997,
+            "positionQty": 0.61,
+            "currentPrice": 392.87,
+            "driftPct": -0.04209261524606156,
+            "unrealizedPnlPct": 10.128936740835243
+          },
+          {
+            "symbol": "GOOGLUSDT",
+            "targetWeight": 0.2,
+            "currentWeight": 0.19863477152822331,
+            "currentValueUSDT": 238.51680000000002,
+            "targetValueUSDT": 240.15613999999997,
+            "positionQty": 0.68,
+            "currentPrice": 350.76,
+            "driftPct": -0.13652284717766972,
+            "unrealizedPnlPct": 18.629247189444385
+          },
+          {
+            "symbol": "NVDAUSDT",
+            "targetWeight": 0.2,
+            "currentWeight": 0.2010280478358788,
+            "currentValueUSDT": 241.39059999999998,
+            "targetValueUSDT": 240.15613999999997,
+            "positionQty": 1.13,
+            "currentPrice": 213.62,
+            "driftPct": 0.1028047835878787,
+            "unrealizedPnlPct": 29.055041229189204
+          },
+          {
+            "symbol": "AAPLUSDT",
+            "targetWeight": 0.15,
+            "currentWeight": 0.15060735070108974,
+            "currentValueUSDT": 180.84640000000002,
+            "targetValueUSDT": 180.11710499999995,
+            "positionQty": 0.67,
+            "currentPrice": 269.92,
+            "driftPct": 0.06073507010897483,
+            "unrealizedPnlPct": -0.39619197333317696
+          }
+        ],
+        "isBalanced": true
+      },
+      "actions": [],
+      "totalFeesEstimated": 0,
+      "rebalanceTriggered": false,
+      "profitHarvestTriggered": true,
+      "portfolioRoiHarvestTriggered": false,
+      "compoundTriggered": false,
+      "autoScaleApplied": true,
+      "summary": "Portfolio Value: $2208.79 | Total ROI: +87.0% | Free USDT: $252.00 | Auto-scaled totalBalance to $1200.78 | Profit harvest triggered: 0 sell(s) totaling $0.00 | Actions: 0 sell(s), 0 buy(s) across 0 total order(s)"
+    },
+    {
+      "timestamp": 1777453203893,
+      "snapshotBefore": {
+        "timestamp": 1777453203891,
+        "totalValueUSDT": 2218.2053488799997,
+        "freeUSDT": 253.86843722,
+        "allocations": [
+          {
+            "symbol": "MUUSDT",
+            "targetWeight": 0.25,
+            "currentWeight": 0.25250338479507817,
+            "currentValueUSDT": 303.6938,
+            "targetValueUSDT": 300.68289999999996,
+            "positionQty": 0.58,
+            "currentPrice": 523.61,
+            "driftPct": 0.25033847950781674,
+            "unrealizedPnlPct": 39.05945527588284
+          },
+          {
+            "symbol": "TSMUSDT",
+            "targetWeight": 0.2,
+            "currentWeight": 0.1990676889174609,
+            "currentValueUSDT": 239.42499999999998,
+            "targetValueUSDT": 240.54631999999998,
+            "positionQty": 0.61,
+            "currentPrice": 392.5,
+            "driftPct": -0.09323110825391057,
+            "unrealizedPnlPct": 9.742682492371094
+          },
+          {
+            "symbol": "GOOGLUSDT",
+            "targetWeight": 0.2,
+            "currentWeight": 0.197781117582676,
+            "currentValueUSDT": 237.8776,
+            "targetValueUSDT": 240.54631999999998,
+            "positionQty": 0.68,
+            "currentPrice": 349.82,
+            "driftPct": -0.2218882417324014,
+            "unrealizedPnlPct": 17.50736472748157
+          },
+          {
+            "symbol": "NVDAUSDT",
+            "targetWeight": 0.2,
+            "currentWeight": 0.20027918115729226,
+            "currentValueUSDT": 240.88209999999995,
+            "targetValueUSDT": 240.54631999999998,
+            "positionQty": 1.13,
+            "currentPrice": 213.17,
+            "driftPct": 0.0279181157292252,
+            "unrealizedPnlPct": 28.151217764377197
+          },
+          {
+            "symbol": "AAPLUSDT",
+            "targetWeight": 0.15,
+            "currentWeight": 0.15036862754749275,
+            "currentValueUSDT": 180.8531,
+            "targetValueUSDT": 180.40973999999997,
+            "positionQty": 0.67,
+            "currentPrice": 269.93,
+            "driftPct": 0.036862754749275584,
+            "unrealizedPnlPct": -0.38138744576847994
+          }
+        ],
+        "isBalanced": true
+      },
+      "actions": [],
+      "totalFeesEstimated": 0,
+      "rebalanceTriggered": false,
+      "profitHarvestTriggered": true,
+      "portfolioRoiHarvestTriggered": false,
+      "compoundTriggered": false,
+      "autoScaleApplied": true,
+      "summary": "Portfolio Value: $2218.21 | Total ROI: +87.8% | Free USDT: $253.87 | Auto-scaled totalBalance to $1202.73 | Profit harvest triggered: 0 sell(s) totaling $0.00 | Actions: 0 sell(s), 0 buy(s) across 0 total order(s)"
+    },
+    {
+      "timestamp": 1777456803863,
+      "snapshotBefore": {
+        "timestamp": 1777456803861,
+        "totalValueUSDT": 2213.98999492,
+        "freeUSDT": 253.07869873,
+        "allocations": [
+          {
+            "symbol": "MUUSDT",
+            "targetWeight": 0.25,
+            "currentWeight": 0.25227648868845753,
+            "currentValueUSDT": 303.15439999999995,
+            "targetValueUSDT": 300.4188,
+            "positionQty": 0.58,
+            "currentPrice": 522.68,
+            "driftPct": 0.22764886884575342,
+            "unrealizedPnlPct": 38.27962812703809
+          },
+          {
+            "symbol": "TSMUSDT",
+            "targetWeight": 0.2,
+            "currentWeight": 0.1989634969582463,
+            "currentValueUSDT": 239.0895,
+            "targetValueUSDT": 240.33504,
+            "positionQty": 0.61,
+            "currentPrice": 391.95,
+            "driftPct": -0.10365030417537058,
+            "unrealizedPnlPct": 9.168520771681136
+          },
+          {
+            "symbol": "GOOGLUSDT",
+            "targetWeight": 0.2,
+            "currentWeight": 0.19778522515901137,
+            "currentValueUSDT": 237.6736,
+            "targetValueUSDT": 240.33504,
+            "positionQty": 0.68,
+            "currentPrice": 349.52,
+            "driftPct": -0.22147748409886425,
+            "unrealizedPnlPct": 17.149317133238103
+          },
+          {
+            "symbol": "NVDAUSDT",
+            "targetWeight": 0.2,
+            "currentWeight": 0.20062451151525804,
+            "currentValueUSDT": 241.08549999999997,
+            "targetValueUSDT": 240.33504,
+            "positionQty": 1.13,
+            "currentPrice": 213.35,
+            "driftPct": 0.062451151525802495,
+            "unrealizedPnlPct": 28.512747150301998
+          },
+          {
+            "symbol": "AAPLUSDT",
+            "targetWeight": 0.15,
+            "currentWeight": 0.15035027767902678,
+            "currentValueUSDT": 180.67220000000003,
+            "targetValueUSDT": 180.25127999999998,
+            "positionQty": 0.67,
+            "currentPrice": 269.66,
+            "driftPct": 0.03502776790267892,
+            "unrealizedPnlPct": -0.7811096900156375
+          }
+        ],
+        "isBalanced": true
+      },
+      "actions": [],
+      "totalFeesEstimated": 0,
+      "rebalanceTriggered": false,
+      "profitHarvestTriggered": true,
+      "portfolioRoiHarvestTriggered": false,
+      "compoundTriggered": false,
+      "autoScaleApplied": true,
+      "summary": "Portfolio Value: $2213.99 | Total ROI: +87.5% | Free USDT: $253.08 | Auto-scaled totalBalance to $1201.68 | Profit harvest triggered: 0 sell(s) totaling $0.00 | Actions: 0 sell(s), 0 buy(s) across 0 total order(s)"
+    },
+    {
+      "timestamp": 1777460403835,
+      "snapshotBefore": {
+        "timestamp": 1777460403833,
+        "totalValueUSDT": 2224.11467468,
+        "freeUSDT": 254.98171867,
+        "allocations": [
+          {
+            "symbol": "MUUSDT",
+            "targetWeight": 0.25,
+            "currentWeight": 0.2528001031068409,
+            "currentValueUSDT": 304.4188,
+            "targetValueUSDT": 301.04695000000004,
+            "positionQty": 0.58,
+            "currentPrice": 524.86,
+            "driftPct": 0.2800103106840923,
+            "unrealizedPnlPct": 40.107610045835386
+          },
+          {
+            "symbol": "TSMUSDT",
+            "targetWeight": 0.2,
+            "currentWeight": 0.19953615208524778,
+            "currentValueUSDT": 240.27899999999997,
+            "targetValueUSDT": 240.83756000000005,
+            "positionQty": 0.61,
+            "currentPrice": 393.9,
+            "driftPct": -0.046384791475223563,
+            "unrealizedPnlPct": 11.204185054127299
+          },
+          {
+            "symbol": "GOOGLUSDT",
+            "targetWeight": 0.2,
+            "currentWeight": 0.19692642626009,
+            "currentValueUSDT": 237.13640000000004,
+            "targetValueUSDT": 240.83756000000005,
+            "positionQty": 0.68,
+            "currentPrice": 348.73,
+            "driftPct": -0.3073573739910018,
+            "unrealizedPnlPct": 16.20645846839706
+          },
+          {
+            "symbol": "NVDAUSDT",
+            "targetWeight": 0.2,
+            "currentWeight": 0.2008064688913141,
+            "currentValueUSDT": 241.8087,
+            "targetValueUSDT": 240.83756000000005,
+            "positionQty": 1.13,
+            "currentPrice": 213.99,
+            "driftPct": 0.08064688913140827,
+            "unrealizedPnlPct": 29.798184966923515
+          },
+          {
+            "symbol": "AAPLUSDT",
+            "targetWeight": 0.15,
+            "currentWeight": 0.14993084965650708,
+            "currentValueUSDT": 180.54490000000004,
+            "targetValueUSDT": 180.62817,
+            "positionQty": 0.67,
+            "currentPrice": 269.47,
+            "driftPct": -0.00691503434929186,
+            "unrealizedPnlPct": -1.0623957137451343
+          }
+        ],
+        "isBalanced": true
+      },
+      "actions": [],
+      "totalFeesEstimated": 0,
+      "rebalanceTriggered": false,
+      "profitHarvestTriggered": true,
+      "portfolioRoiHarvestTriggered": false,
+      "compoundTriggered": false,
+      "autoScaleApplied": true,
+      "summary": "Portfolio Value: $2224.11 | Total ROI: +88.3% | Free USDT: $254.98 | Auto-scaled totalBalance to $1204.19 | Profit harvest triggered: 0 sell(s) totaling $0.00 | Actions: 0 sell(s), 0 buy(s) across 0 total order(s)"
+    },
+    {
+      "timestamp": 1777464003806,
+      "snapshotBefore": {
+        "timestamp": 1777464003805,
+        "totalValueUSDT": 2226.35688696,
+        "freeUSDT": 255.38069674,
+        "allocations": [
+          {
+            "symbol": "MUUSDT",
+            "targetWeight": 0.25,
+            "currentWeight": 0.2542819795688053,
+            "currentValueUSDT": 306.3676,
+            "targetValueUSDT": 301.208525,
+            "positionQty": 0.58,
+            "currentPrice": 528.22,
+            "driftPct": 0.42819795688053275,
+            "unrealizedPnlPct": 42.92505006746784
+          },
+          {
+            "symbol": "TSMUSDT",
+            "targetWeight": 0.2,
+            "currentWeight": 0.1991000254723866,
+            "currentValueUSDT": 239.8825,
+            "targetValueUSDT": 240.96682,
+            "positionQty": 0.61,
+            "currentPrice": 393.25,
+            "driftPct": -0.0899974527613423,
+            "unrealizedPnlPct": 10.52563029331193
+          },
+          {
+            "symbol": "GOOGLUSDT",
+            "targetWeight": 0.2,
+            "currentWeight": 0.19673048762481074,
+            "currentValueUSDT": 237.0276,
+            "targetValueUSDT": 240.96682,
+            "positionQty": 0.68,
+            "currentPrice": 348.57,
+            "driftPct": -0.3269512375189271,
+            "unrealizedPnlPct": 16.015499751467186
+          },
+          {
+            "symbol": "NVDAUSDT",
+            "targetWeight": 0.2,
+            "currentWeight": 0.20054868964947123,
+            "currentValueUSDT": 241.62789999999998,
+            "targetValueUSDT": 240.96682,
+            "positionQty": 1.13,
+            "currentPrice": 213.83,
+            "driftPct": 0.05486896494712179,
+            "unrealizedPnlPct": 29.476825512768144
+          },
+          {
+            "symbol": "AAPLUSDT",
+            "targetWeight": 0.15,
+            "currentWeight": 0.14933881768452603,
+            "currentValueUSDT": 179.9285,
+            "targetValueUSDT": 180.725115,
+            "positionQty": 0.67,
+            "currentPrice": 268.55,
+            "driftPct": -0.06611823154739627,
+            "unrealizedPnlPct": -2.4244122496985274
+          }
+        ],
+        "isBalanced": true
+      },
+      "actions": [
+        {
+          "symbol": "MUUSDT",
+          "side": "SELL",
+          "amountUSDT": 5.159074999999973,
+          "quantityAsset": 0.00976690583469004,
+          "reason": "PROFIT_HARVEST",
+          "fromWeight": 0.2542819795688053,
+          "toWeight": 0.25
+        }
+      ],
+      "totalFeesEstimated": 0.0020636299999999895,
+      "rebalanceTriggered": false,
+      "profitHarvestTriggered": true,
+      "portfolioRoiHarvestTriggered": false,
+      "compoundTriggered": false,
+      "autoScaleApplied": true,
+      "summary": "Portfolio Value: $2226.36 | Total ROI: +88.5% | Free USDT: $255.38 | Auto-scaled totalBalance to $1204.83 | Profit harvest triggered: 1 sell(s) totaling $5.16 | Actions: 1 sell(s), 0 buy(s) across 1 total order(s)"
+    },
+    {
+      "timestamp": 1777467603614,
+      "snapshotBefore": {
+        "timestamp": 1777467603613,
+        "totalValueUSDT": 2217.7714516,
+        "freeUSDT": 256.4006629,
+        "allocations": [
+          {
+            "symbol": "MUUSDT",
+            "targetWeight": 0.25,
+            "currentWeight": 0.24729987901042202,
+            "currentValueUSDT": 294.82320000000004,
+            "targetValueUSDT": 298.04220000000004,
+            "positionQty": 0.56,
+            "currentPrice": 526.47,
+            "driftPct": -0.27001209895779754,
+            "unrealizedPnlPct": 41.45763338953428
+          },
+          {
+            "symbol": "TSMUSDT",
+            "targetWeight": 0.2,
+            "currentWeight": 0.20102589499070936,
+            "currentValueUSDT": 239.6568,
+            "targetValueUSDT": 238.43376000000004,
+            "positionQty": 0.61,
+            "currentPrice": 392.88,
+            "driftPct": 0.10258949907093473,
+            "unrealizedPnlPct": 10.13937604484778
+          },
+          {
+            "symbol": "GOOGLUSDT",
+            "targetWeight": 0.2,
+            "currentWeight": 0.19863797811182443,
+            "currentValueUSDT": 236.81000000000003,
+            "targetValueUSDT": 238.43376000000004,
+            "positionQty": 0.68,
+            "currentPrice": 348.25,
+            "driftPct": -0.13620218881755797,
+            "unrealizedPnlPct": 15.63358231760751
+          },
+          {
+            "symbol": "NVDAUSDT",
+            "targetWeight": 0.2,
+            "currentWeight": 0.20213899239772082,
+            "currentValueUSDT": 240.98379999999997,
+            "targetValueUSDT": 238.43376000000004,
+            "positionQty": 1.13,
+            "currentPrice": 213.26,
+            "driftPct": 0.2138992397720807,
+            "unrealizedPnlPct": 28.331982457339596
+          },
+          {
+            "symbol": "AAPLUSDT",
+            "targetWeight": 0.15,
+            "currentWeight": 0.1508972554893233,
+            "currentValueUSDT": 179.895,
+            "targetValueUSDT": 178.82532,
+            "positionQty": 0.67,
+            "currentPrice": 268.5,
+            "driftPct": 0.08972554893233176,
+            "unrealizedPnlPct": -2.4984348875220967
+          }
+        ],
+        "isBalanced": true
+      },
+      "actions": [],
+      "totalFeesEstimated": 0,
+      "rebalanceTriggered": false,
+      "profitHarvestTriggered": true,
+      "portfolioRoiHarvestTriggered": false,
+      "compoundTriggered": false,
+      "autoScaleApplied": true,
+      "summary": "Portfolio Value: $2217.77 | Total ROI: +87.8% | Free USDT: $256.40 | Auto-scaled totalBalance to $1192.17 | Profit harvest triggered: 0 sell(s) totaling $0.00 | Actions: 0 sell(s), 0 buy(s) across 0 total order(s)"
+    },
+    {
+      "timestamp": 1777471203561,
+      "snapshotBefore": {
+        "timestamp": 1777471203559,
+        "totalValueUSDT": 2208.32239836,
+        "freeUSDT": 254.65337459,
+        "allocations": [
+          {
+            "symbol": "MUUSDT",
+            "targetWeight": 0.25,
+            "currentWeight": 0.2464932388082497,
+            "currentValueUSDT": 293.2552,
+            "targetValueUSDT": 297.42722499999996,
+            "positionQty": 0.56,
+            "currentPrice": 523.67,
+            "driftPct": -0.3506761191750307,
+            "unrealizedPnlPct": 39.10976670484052
+          },
+          {
+            "symbol": "TSMUSDT",
+            "targetWeight": 0.2,
+            "currentWeight": 0.2002930296646516,
+            "currentValueUSDT": 238.29039999999998,
+            "targetValueUSDT": 237.94178,
+            "positionQty": 0.61,
+            "currentPrice": 390.64,
+            "driftPct": 0.029302966465158398,
+            "unrealizedPnlPct": 7.800971946037805
+          },
+          {
+            "symbol": "GOOGLUSDT",
+            "targetWeight": 0.2,
+            "currentWeight": 0.20126066132648082,
+            "currentValueUSDT": 239.44160000000002,
+            "targetValueUSDT": 237.94178,
+            "positionQty": 0.68,
+            "currentPrice": 352.12,
+            "driftPct": 0.1260661326480811,
+            "unrealizedPnlPct": 20.25239628334805
+          },
+          {
+            "symbol": "NVDAUSDT",
+            "targetWeight": 0.2,
+            "currentWeight": 0.20019191249220714,
+            "currentValueUSDT": 238.1701,
+            "targetValueUSDT": 237.94178,
+            "positionQty": 1.13,
+            "currentPrice": 210.77,
+            "driftPct": 0.01919124922071247,
+            "unrealizedPnlPct": 23.33082595204668
+          },
+          {
+            "symbol": "AAPLUSDT",
+            "targetWeight": 0.15,
+            "currentWeight": 0.1517611577084109,
+            "currentValueUSDT": 180.55160000000004,
+            "targetValueUSDT": 178.45633499999997,
+            "positionQty": 0.67,
+            "currentPrice": 269.48,
+            "driftPct": 0.17611577084108987,
+            "unrealizedPnlPct": -1.0475911861804372
+          }
+        ],
+        "isBalanced": true
+      },
+      "actions": [],
+      "totalFeesEstimated": 0,
+      "rebalanceTriggered": false,
+      "profitHarvestTriggered": true,
+      "portfolioRoiHarvestTriggered": false,
+      "compoundTriggered": false,
+      "autoScaleApplied": true,
+      "summary": "Portfolio Value: $2208.32 | Total ROI: +87.0% | Free USDT: $254.65 | Auto-scaled totalBalance to $1189.71 | Profit harvest triggered: 0 sell(s) totaling $0.00 | Actions: 0 sell(s), 0 buy(s) across 0 total order(s)"
+    },
+    {
+      "timestamp": 1777474803512,
+      "snapshotBefore": {
+        "timestamp": 1777474803510,
+        "totalValueUSDT": 2614.72025348,
+        "freeUSDT": 355.15971337,
+        "allocations": [
+          {
+            "symbol": "MUUSDT",
+            "targetWeight": 0.25,
+            "currentWeight": 0.24600801921879029,
+            "currentValueUSDT": 293.7536,
+            "targetValueUSDT": 298.52035,
+            "positionQty": 0.56,
+            "currentPrice": 524.56,
+            "driftPct": -0.3991980781209714,
+            "unrealizedPnlPct": 39.85605290104671
+          },
+          {
+            "symbol": "TSMUSDT",
+            "targetWeight": 0.2,
+            "currentWeight": 0.20180223894283922,
+            "currentValueUSDT": 240.96829999999997,
+            "targetValueUSDT": 238.81628,
+            "positionQty": 0.61,
+            "currentPrice": 395.03,
+            "driftPct": 0.18022389428392072,
+            "unrealizedPnlPct": 12.38382640754482
+          },
+          {
+            "symbol": "GOOGLUSDT",
+            "targetWeight": 0.2,
+            "currentWeight": 0.20077994682774558,
+            "currentValueUSDT": 239.7476,
+            "targetValueUSDT": 238.81628,
+            "positionQty": 0.68,
+            "currentPrice": 352.57,
+            "driftPct": 0.07799468277455701,
+            "unrealizedPnlPct": 20.789467674713215
+          },
+          {
+            "symbol": "NVDAUSDT",
+            "targetWeight": 0.2,
+            "currentWeight": 0.20018752490408104,
+            "currentValueUSDT": 239.04019999999997,
+            "targetValueUSDT": 238.81628,
+            "positionQty": 1.13,
+            "currentPrice": 211.54,
+            "driftPct": 0.018752490408102673,
+            "unrealizedPnlPct": 24.877368325169364
+          },
+          {
+            "symbol": "AAPLUSDT",
+            "targetWeight": 0.15,
+            "currentWeight": 0.15122227010654382,
+            "currentValueUSDT": 180.5717,
+            "targetValueUSDT": 179.11221,
+            "positionQty": 0.67,
+            "currentPrice": 269.51,
+            "driftPct": 0.12222701065438268,
+            "unrealizedPnlPct": -1.003177603486346
+          }
+        ],
+        "isBalanced": true
+      },
+      "actions": [],
+      "totalFeesEstimated": 0,
+      "rebalanceTriggered": false,
+      "profitHarvestTriggered": true,
+      "portfolioRoiHarvestTriggered": false,
+      "compoundTriggered": false,
+      "autoScaleApplied": true,
+      "summary": "Portfolio Value: $2614.72 | Total ROI: +121.4% | Free USDT: $355.16 | Auto-scaled totalBalance to $1194.08 | Profit harvest triggered: 0 sell(s) totaling $0.00 | Actions: 0 sell(s), 0 buy(s) across 0 total order(s)"
+    },
+    {
+      "timestamp": 1777475250340,
+      "snapshotBefore": {
+        "timestamp": 1777475250339,
+        "totalValueUSDT": 2606.6759133200003,
+        "freeUSDT": 353.64572833,
+        "allocations": [
+          {
+            "symbol": "MUUSDT",
+            "targetWeight": 0.25,
+            "currentWeight": 0.24517818660121313,
+            "currentValueUSDT": 292.2752,
+            "targetValueUSDT": 298.02325,
+            "positionQty": 0.56,
+            "currentPrice": 521.92,
+            "driftPct": -0.4821813398786873,
+            "unrealizedPnlPct": 37.642350026906946
+          },
+          {
+            "symbol": "TSMUSDT",
+            "targetWeight": 0.2,
+            "currentWeight": 0.20204161923608308,
+            "currentValueUSDT": 240.8524,
+            "targetValueUSDT": 238.41860000000003,
+            "positionQty": 0.61,
+            "currentPrice": 394.84,
+            "driftPct": 0.20416192360830643,
+            "unrealizedPnlPct": 12.185479631306476
+          },
+          {
+            "symbol": "GOOGLUSDT",
+            "targetWeight": 0.2,
+            "currentWeight": 0.20128597349367877,
+            "currentValueUSDT": 239.9516,
+            "targetValueUSDT": 238.41860000000003,
+            "positionQty": 0.68,
+            "currentPrice": 352.87,
+            "driftPct": 0.12859734936787603,
+            "unrealizedPnlPct": 21.14751526895668
+          },
+          {
+            "symbol": "NVDAUSDT",
+            "targetWeight": 0.2,
+            "currentWeight": 0.2000759168957455,
+            "currentValueUSDT": 238.50909999999996,
+            "targetValueUSDT": 238.41860000000003,
+            "positionQty": 1.13,
+            "currentPrice": 211.07,
+            "driftPct": 0.007591689574548699,
+            "unrealizedPnlPct": 23.933374928587963
+          },
+          {
+            "symbol": "AAPLUSDT",
+            "targetWeight": 0.15,
+            "currentWeight": 0.15141830377327944,
+            "currentValueUSDT": 180.5047,
+            "targetValueUSDT": 178.81395,
+            "positionQty": 0.67,
+            "currentPrice": 269.41,
+            "driftPct": 0.141830377327945,
+            "unrealizedPnlPct": -1.151222879133401
+          }
+        ],
+        "isBalanced": true
+      },
+      "actions": [],
+      "totalFeesEstimated": 0,
+      "rebalanceTriggered": false,
+      "profitHarvestTriggered": true,
+      "portfolioRoiHarvestTriggered": false,
+      "compoundTriggered": false,
+      "autoScaleApplied": false,
+      "summary": "Portfolio Value: $2606.68 | Total ROI: +120.7% | Free USDT: $353.65 | Profit harvest triggered: 0 sell(s) totaling $0.00 | Actions: 0 sell(s), 0 buy(s) across 0 total order(s)"
+    },
+    {
+      "timestamp": 1777475285567,
+      "snapshotBefore": {
+        "timestamp": 1777475285565,
+        "totalValueUSDT": 2606.68182148,
+        "freeUSDT": 353.64235537,
+        "allocations": [
+          {
+            "symbol": "MUUSDT",
+            "targetWeight": 0.25,
+            "currentWeight": 0.24523996227201392,
+            "currentValueUSDT": 292.3536,
+            "targetValueUSDT": 298.0281,
+            "positionQty": 0.56,
+            "currentPrice": 522.06,
+            "driftPct": -0.4760037727986083,
+            "unrealizedPnlPct": 37.759743361141616
+          },
+          {
+            "symbol": "TSMUSDT",
+            "targetWeight": 0.2,
+            "currentWeight": 0.20210485185792884,
+            "currentValueUSDT": 240.9317,
+            "targetValueUSDT": 238.42248,
+            "positionQty": 0.61,
+            "currentPrice": 394.97,
+            "driftPct": 0.210485185792883,
+            "unrealizedPnlPct": 12.32119058346961
+          },
+          {
+            "symbol": "GOOGLUSDT",
+            "targetWeight": 0.2,
+            "currentWeight": 0.2012028395980111,
+            "currentValueUSDT": 239.85640000000004,
+            "targetValueUSDT": 238.42248,
+            "positionQty": 0.68,
+            "currentPrice": 352.73,
+            "driftPct": 0.12028395980110962,
+            "unrealizedPnlPct": 20.980426391643086
+          },
+          {
+            "symbol": "NVDAUSDT",
+            "targetWeight": 0.2,
+            "currentWeight": 0.20002526607390375,
+            "currentValueUSDT": 238.4526,
+            "targetValueUSDT": 238.42248,
+            "positionQty": 1.13,
+            "currentPrice": 211.02,
+            "driftPct": 0.002526607390374025,
+            "unrealizedPnlPct": 23.832950099164446
+          },
+          {
+            "symbol": "AAPLUSDT",
+            "targetWeight": 0.15,
+            "currentWeight": 0.15142708019814238,
+            "currentValueUSDT": 180.5181,
+            "targetValueUSDT": 178.81686,
+            "positionQty": 0.67,
+            "currentPrice": 269.43,
+            "driftPct": 0.14270801981423886,
+            "unrealizedPnlPct": -1.1216138240040068
+          }
+        ],
+        "isBalanced": true
+      },
+      "actions": [
+        {
+          "symbol": "MUUSDT",
+          "side": "BUY",
+          "amountUSDT": 242.31685537000004,
+          "quantityAsset": 0.46415518402099387,
+          "reason": "COMPOUND_INVEST",
+          "fromWeight": 0.24523996227201392,
+          "toWeight": 0.4485067476607072
+        },
+        {
+          "symbol": "TSMUSDT",
+          "side": "BUY",
+          "amountUSDT": 186.80466429600003,
+          "quantityAsset": 0.4729591216953187,
+          "reason": "COMPOUND_INVEST",
+          "fromWeight": 0.20210485185792884,
+          "toWeight": 0.35880539812856577
+        },
+        {
+          "symbol": "GOOGLUSDT",
+          "side": "BUY",
+          "amountUSDT": 187.879964296,
+          "quantityAsset": 0.5326452649221785,
+          "reason": "COMPOUND_INVEST",
+          "fromWeight": 0.2012028395980111,
+          "toWeight": 0.35880539812856577
+        },
+        {
+          "symbol": "NVDAUSDT",
+          "side": "BUY",
+          "amountUSDT": 189.28376429600004,
+          "quantityAsset": 0.8969944284712351,
+          "reason": "COMPOUND_INVEST",
+          "fromWeight": 0.20002526607390375,
+          "toWeight": 0.35880539812856577
+        },
+        {
+          "symbol": "AAPLUSDT",
+          "side": "BUY",
+          "amountUSDT": 140.284173222,
+          "quantityAsset": 0.5206702045874624,
+          "reason": "COMPOUND_INVEST",
+          "fromWeight": 0.15142708019814238,
+          "toWeight": 0.2691040485964243
+        }
+      ],
+      "totalFeesEstimated": 0.3786277685920001,
+      "rebalanceTriggered": false,
+      "profitHarvestTriggered": false,
+      "portfolioRoiHarvestTriggered": false,
+      "compoundTriggered": true,
+      "autoScaleApplied": false,
+      "summary": "Portfolio Value: $2606.68 | Total ROI: +120.7% | Free USDT: $353.64 | 📈 Compound invest: 5 buy(s) totaling $946.57 | Actions: 0 sell(s), 5 buy(s) across 5 total order(s)"
+    },
+    {
+      "timestamp": 1777475425418,
+      "snapshotBefore": {
+        "timestamp": 1777475425416,
+        "totalValueUSDT": 2592.46201116,
+        "freeUSDT": 115.21092779,
+        "allocations": [
+          {
+            "symbol": "MUUSDT",
+            "targetWeight": 0.25,
+            "currentWeight": 0.24893509311681175,
+            "currentValueUSDT": 530.6346,
+            "targetValueUSDT": 532.904575,
+            "positionQty": 1.02,
+            "currentPrice": 520.23,
+            "driftPct": -0.10649068831882491
+          },
+          {
+            "symbol": "TSMUSDT",
+            "targetWeight": 0.2,
+            "currentWeight": 0.19957738212324413,
+            "currentValueUSDT": 425.42280000000005,
+            "targetValueUSDT": 426.32366,
+            "positionQty": 1.08,
+            "currentPrice": 393.91,
+            "driftPct": -0.042261787675587636
+          },
+          {
+            "symbol": "GOOGLUSDT",
+            "targetWeight": 0.2,
+            "currentWeight": 0.2001796006348791,
+            "currentValueUSDT": 426.70649999999995,
+            "targetValueUSDT": 426.32366,
+            "positionQty": 1.21,
+            "currentPrice": 352.65,
+            "driftPct": 0.017960063487909572
+          },
+          {
+            "symbol": "NVDAUSDT",
+            "targetWeight": 0.2,
+            "currentWeight": 0.2008174258965594,
+            "currentValueUSDT": 428.06609999999995,
+            "targetValueUSDT": 426.32366,
+            "positionQty": 2.03,
+            "currentPrice": 210.87,
+            "driftPct": 0.08174258965593928
+          },
+          {
+            "symbol": "AAPLUSDT",
+            "targetWeight": 0.15,
+            "currentWeight": 0.15049049822850555,
+            "currentValueUSDT": 320.7883,
+            "targetValueUSDT": 319.742745,
+            "positionQty": 1.19,
+            "currentPrice": 269.57,
+            "driftPct": 0.04904982285055537
+          }
+        ],
+        "isBalanced": true
+      },
+      "actions": [
+        {
+          "symbol": "MUUSDT",
+          "side": "SELL",
+          "amountUSDT": 235.38824999999997,
+          "quantityAsset": 0.45246958076235505,
+          "reason": "ROI_HARVEST",
+          "fromWeight": 0.24893509311681175,
+          "toWeight": 0.25
+        },
+        {
+          "symbol": "TSMUSDT",
+          "side": "SELL",
+          "amountUSDT": 189.22572000000002,
+          "quantityAsset": 0.48037805590109417,
+          "reason": "ROI_HARVEST",
+          "fromWeight": 0.19957738212324413,
+          "toWeight": 0.2
+        },
+        {
+          "symbol": "GOOGLUSDT",
+          "side": "SELL",
+          "amountUSDT": 190.50941999999992,
+          "quantityAsset": 0.5402223734581028,
+          "reason": "ROI_HARVEST",
+          "fromWeight": 0.2001796006348791,
+          "toWeight": 0.2
+        },
+        {
+          "symbol": "NVDAUSDT",
+          "side": "SELL",
+          "amountUSDT": 191.86901999999992,
+          "quantityAsset": 0.9098924455825861,
+          "reason": "ROI_HARVEST",
+          "fromWeight": 0.2008174258965594,
+          "toWeight": 0.2
+        },
+        {
+          "symbol": "AAPLUSDT",
+          "side": "SELL",
+          "amountUSDT": 143.64049,
+          "quantityAsset": 0.5328504284601402,
+          "reason": "ROI_HARVEST",
+          "fromWeight": 0.15049049822850555,
+          "toWeight": 0.15
+        }
+      ],
+      "totalFeesEstimated": 0.3802531599999999,
+      "rebalanceTriggered": false,
+      "profitHarvestTriggered": false,
+      "portfolioRoiHarvestTriggered": true,
+      "compoundTriggered": false,
+      "autoScaleApplied": true,
+      "summary": "Portfolio Value: $2592.46 | Total ROI: +119.5% | Free USDT: $115.21 | Auto-scaled totalBalance to $2131.62 | 💰 Portfolio ROI harvest: sold 20% of each position — $950.63 freed | Actions: 5 sell(s), 0 buy(s) across 5 total order(s)"
+    }
+  ],
+  "lastSnapshot": {
+    "timestamp": 1777475425416,
+    "totalValueUSDT": 2592.46201116,
+    "freeUSDT": 115.21092779,
+    "allocations": [
+      {
+        "symbol": "MUUSDT",
+        "targetWeight": 0.25,
+        "currentWeight": 0.24893509311681175,
+        "currentValueUSDT": 530.6346,
+        "targetValueUSDT": 532.904575,
+        "positionQty": 1.02,
+        "currentPrice": 520.23,
+        "driftPct": -0.10649068831882491
+      },
+      {
+        "symbol": "TSMUSDT",
+        "targetWeight": 0.2,
+        "currentWeight": 0.19957738212324413,
+        "currentValueUSDT": 425.42280000000005,
+        "targetValueUSDT": 426.32366,
+        "positionQty": 1.08,
+        "currentPrice": 393.91,
+        "driftPct": -0.042261787675587636
+      },
+      {
+        "symbol": "GOOGLUSDT",
+        "targetWeight": 0.2,
+        "currentWeight": 0.2001796006348791,
+        "currentValueUSDT": 426.70649999999995,
+        "targetValueUSDT": 426.32366,
+        "positionQty": 1.21,
+        "currentPrice": 352.65,
+        "driftPct": 0.017960063487909572
+      },
+      {
+        "symbol": "NVDAUSDT",
+        "targetWeight": 0.2,
+        "currentWeight": 0.2008174258965594,
+        "currentValueUSDT": 428.06609999999995,
+        "targetValueUSDT": 426.32366,
+        "positionQty": 2.03,
+        "currentPrice": 210.87,
+        "driftPct": 0.08174258965593928
+      },
+      {
+        "symbol": "AAPLUSDT",
+        "targetWeight": 0.15,
+        "currentWeight": 0.15049049822850555,
+        "currentValueUSDT": 320.7883,
+        "targetValueUSDT": 319.742745,
+        "positionQty": 1.19,
+        "currentPrice": 269.57,
+        "driftPct": 0.04904982285055537
+      }
+    ],
+    "isBalanced": true
+  },
+  "initialPortfolioValueUSDT": 1180.9854,
+  "cumulativeFeesPaid": 4.225158710491425
+}
