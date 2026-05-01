@@ -181,6 +181,14 @@ tr:last-child td {
   border-bottom: none;
 }
 
+.row-negative {
+  background: rgba(239, 68, 68, 0.05);
+}
+
+.row-negative:hover {
+  background: rgba(239, 68, 68, 0.08);
+}
+
 .asset-symbol {
   font-weight: 600;
   display: flex;
@@ -190,6 +198,7 @@ tr:last-child td {
 
 .pnl-positive { color: var(--success); }
 .pnl-negative { color: var(--danger); }
+.pnl-neutral { color: var(--text-muted); }
 
 .progress-bar-bg {
   background: rgba(255, 255, 255, 0.1);

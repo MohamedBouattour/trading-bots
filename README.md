@@ -1,39 +1,33 @@
-# Momentum Sniper Trading Bot
+# 📈 HODL Portfolio Rebalancer & Compounder
 
-An advanced "One-Shot" momentum trading bot for cryptocurrency spot markets (Binance).
+An advanced algorithmic portfolio manager for cryptocurrency assets on Binance (Spot & Futures).
 
 ## 🚀 Key Features
-- **One-Shot Execution**: Concentrates capital on high-probability signals.
-- **Trend-Following**: Aligns entries with long-term market momentum (SMA 200).
-- **Multiple Strategies**: Includes implementations for Pullbacks, Crossovers, and Mean Reversion.
-- **Dynamic Risk Management**: Integrated Stop Loss, Take Profit, and Trailing Stop.
-- **Backtesting & Optimization**: Built-in tools to verify and fine-tune parameters using historical data.
-- **State Persistence**: Saves bot state between cron runs to maintain continuity.
+- **Auto-Scale Growth Engine**: Automatically updates portfolio value to capture and reinvest gains.
+- **Continuous Compounding**: Idle USDT (margin) ≥ $10 is automatically distributed across underweight assets.
+- **Drift Rebalancing**: Automatically sells overweight positions and buys underweight ones to maintain target allocations.
+- **ROI Harvesting**: Captures profits when individual assets exceed a set ceiling (e.g., 35%).
+- **Leverage Support**: Native support for Binance Futures with margin-aware quantity calculations.
+- **State Persistence**: Tracks portfolio history and high-water marks in a local JSON state store.
 
 ## 📁 Directory Structure
 ```
 src/
-├── momentum-sniper/    # Main bot module
-│   ├── application/    # Use cases (Backtest logic)
-│   ├── domain/         # Core bot logic (MomentumBot)
-│   ├── infrastructure/ # External services (Binance, Market Data, Reporting)
-│   ├── ports/          # Interfaces
-│   └── presentation/   # CLI entry points
-├── models/             # Shared data models (Position, Order, BotConfig)
-└── shared/             # Common utilities and indicators
+├── stock-portfolio-manager/ # Main rebalancer module
+│   ├── application/         # Use cases (Rebalance, Initialize)
+│   ├── domain/              # Core engine (RebalancingEngine, Models)
+│   ├── infrastructure/      # Adapters (Binance, File Store, Logger)
+│   └── presentation/        # CLI (Dry Run, Live Rebalancer)
+├── shared/                  # Common utilities and math
 ```
 
 ## 🛠 Setup
 1. Clone the repository.
 2. Install dependencies: `npm install`.
-3. Create a `.env` file based on `.env.example`.
-4. Run a backtest: `npm run backtest`.
-
-## 📈 Performance Summary (Example)
-The **Momentum Sniper** (SMA 5/10 Breakout) achieved:
-- **ROI**: High variability based on market trend for BTC/USDT.
-- **Win Rate**: ~60% in trending markets.
-- **Timeframe**: Optimized for 1h cycles.
+3. Configure your portfolio in `src/stock-portfolio-manager/infrastructure/config/config_longterm.json`.
+4. Create a `.env` file with your Binance API keys.
+5. Run a dry run: `npm run rebalancer:dry`.
+6. Start the rebalancer loop: `npm run rebalancer:loop`.
 
 ## ⚖️ License
 ISC

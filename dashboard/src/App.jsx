@@ -89,7 +89,7 @@ function App() {
       <header>
         <div className="title-container">
           <h1>HODL Rebalancer</h1>
-          <p>Live Portfolio Monitor</p>
+          <p>Live Portfolio Monitor • Last update: {latest.timestamp}</p>
         </div>
         <div className="status-badge">
           <div className="status-dot"></div>
@@ -117,8 +117,15 @@ function App() {
         </div>
 
         <div className="glass-card stat-item">
-          <div className="stat-label"><Layers size={16} /> Total Rebalances</div>
-          <div className="stat-value" style={{ color: 'var(--accent-primary)' }}>{latest.rebalances}</div>
+          <div className="stat-label"><Activity size={16} /> Negative Assets</div>
+          <div className="stat-value" style={{ color: latest.assets.filter(a => a.pnlValue < 0).length > 0 ? 'var(--danger)' : 'var(--success)' }}>
+            {latest.assets.filter(a => a.pnlValue < 0).length}
+          </div>
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+            Total PnL: <span className={latest.assets.reduce((sum, a) => sum + a.pnlValue, 0) >= 0 ? 'success' : 'danger'}>
+              {latest.assets.reduce((sum, a) => sum + a.pnlValue, 0) >= 0 ? '+' : ''}${latest.assets.reduce((sum, a) => sum + a.pnlValue, 0).toFixed(2)}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -200,19 +207,24 @@ function App() {
           </thead>
           <tbody>
             {latest.assets.map((asset, i) => (
-              <tr key={i}>
+              <tr key={i} className={asset.pnlValue < 0 ? 'row-negative' : ''}>
                 <td>
                   <div className="asset-symbol">
-                    <DollarSign size={14} style={{ color: 'var(--accent-secondary)' }} />
+                    <DollarSign size={14} style={{ color: asset.pnlValue < 0 ? 'var(--danger)' : 'var(--accent-secondary)' }} />
                     {asset.symbol.replace('USDT', '')}
                   </div>
                 </td>
-                <td style={{ fontWeight: 500 }}>${asset.notional.toFixed(2)}</td>
+                <td style={{ fontWeight: 500, color: asset.notional < 0 ? 'var(--danger)' : 'inherit' }}>
+                  {asset.notional < 0 ? '-' : ''}${Math.abs(asset.notional).toFixed(2)}
+                </td>
                 <td>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                     <div style={{ width: '45px' }}>{asset.weight.toFixed(1)}%</div>
                     <div className="progress-bar-bg">
-                      <div className="progress-bar-fill" style={{ width: `${(asset.weight / 100) * 100}%` }}></div>
+                      <div className="progress-bar-fill" style={{ 
+                        width: `${Math.min(100, (Math.abs(asset.weight) / 100) * 100)}%`,
+                        background: asset.weight < 0 ? 'linear-gradient(90deg, var(--danger), #ff8080)' : 'linear-gradient(90deg, var(--accent-primary), var(--accent-secondary))'
+                      }}></div>
                     </div>
                   </div>
                 </td>
@@ -222,7 +234,7 @@ function App() {
                 </td>
                 <td style={{ color: 'var(--text-muted)' }}>${asset.entry.toFixed(2)}</td>
                 <td>${asset.mark.toFixed(2)}</td>
-                <td className={asset.pnlValue >= 0 ? 'pnl-positive' : 'pnl-negative'} style={{ fontWeight: 500 }}>
+                <td className={asset.pnlValue > 0 ? 'pnl-positive' : (asset.pnlValue < 0 ? 'pnl-negative' : 'pnl-neutral')} style={{ fontWeight: 500 }}>
                   {asset.pnlStr}
                 </td>
               </tr>

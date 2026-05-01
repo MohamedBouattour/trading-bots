@@ -117,7 +117,7 @@ describe("RebalancingEngine", () => {
             makeAllocation({ symbol: "AAPLUSDT", targetWeight: 0.15, currentWeight: 0.15, driftPct: 0, currentValueUSDT: 600, currentPrice: 100 }),
         ];
         const snapshot = makeSnapshot(allocations);
-        const config = makeConfig();
+        const config = makeConfig({ profitHarvestCeilingPct: 50 });
         const result = engine.analyzePortfolio(snapshot, config);
 
         expect(result.rebalanceTriggered).toBe(true);
@@ -146,6 +146,30 @@ describe("RebalancingEngine", () => {
         );
         expect(harvestSell).toBeDefined();
         expect(harvestSell!.side).toBe("SELL");
+    });
+
+    it("should trigger profit harvest when asset PnL exceeds threshold", () => {
+        const allocations = [
+            // MUUSDT has 12% PnL, target 10% harvest. Weight is still perfect (25%).
+            makeAllocation({ symbol: "MUUSDT", targetWeight: 0.25, currentWeight: 0.25, currentValueUSDT: 1000, unrealizedPnlPct: 12 }),
+            makeAllocation({ symbol: "TSMUSDT", targetWeight: 0.20, currentWeight: 0.20, currentValueUSDT: 800, unrealizedPnlPct: 0 }),
+            makeAllocation({ symbol: "GOOGLUSDT", targetWeight: 0.20, currentWeight: 0.20, currentValueUSDT: 800, unrealizedPnlPct: 0 }),
+            makeAllocation({ symbol: "NVDAUSDT", targetWeight: 0.20, currentWeight: 0.20, currentValueUSDT: 800, unrealizedPnlPct: 0 }),
+            makeAllocation({ symbol: "AAPLUSDT", targetWeight: 0.15, currentWeight: 0.15, currentValueUSDT: 600, unrealizedPnlPct: 0 }),
+        ];
+        const snapshot = makeSnapshot(allocations);
+        const config = makeConfig({ assetProfitHarvestPct: 10 });
+        const result = engine.analyzePortfolio(snapshot, config);
+
+        expect(result.profitHarvestTriggered).toBe(true);
+        const harvestSell = result.actions.find(
+            (a) => a.symbol === "MUUSDT" && a.reason === "PROFIT_HARVEST",
+        );
+        expect(harvestSell).toBeDefined();
+        expect(harvestSell!.side).toBe("SELL");
+        
+        // Should sell roughly the PnL amount: 1000 * (12/112) = 107.14
+        expect(harvestSell!.amountUSDT).toBeCloseTo(107.14, 1);
     });
 
     // ── 5. Profit harvest + redistribution ────────────────────────────

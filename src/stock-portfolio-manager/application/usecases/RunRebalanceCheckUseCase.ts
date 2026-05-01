@@ -183,6 +183,7 @@ export class RunRebalanceCheckUseCase {
             this.logger.info(
                 `📊 Portfolio grew from initial $${updatedState.initialPortfolioValueUSDT.toFixed(2)} to $${snapshot.totalValueUSDT.toFixed(2)} (auto-scale active).`,
             );
+            updatedState.initialPortfolioValueUSDT = snapshot.totalValueUSDT;
         }
 
         // Append to history (cap at 12 entries)
@@ -239,6 +240,10 @@ export class RunRebalanceCheckUseCase {
             const value = qty * price;
             totalPositionValue += value;
 
+            const pnl = position ? position.unrealizedPnl : 0;
+            const entryValue = value - pnl;
+            const unrealizedPnlPct = entryValue > 0 ? (pnl / entryValue) * 100 : 0;
+
             allocations.push({
                 symbol: assetConfig.symbol,
                 targetWeight: assetConfig.targetWeight,
@@ -248,6 +253,7 @@ export class RunRebalanceCheckUseCase {
                 positionQty: qty,
                 currentPrice: price,
                 driftPct: 0, // Calculated below
+                unrealizedPnlPct,
             });
         }
 

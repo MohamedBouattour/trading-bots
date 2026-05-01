@@ -14,7 +14,7 @@ export function parseLog(logText) {
   const portfolioRegex = /Portfolio Value:\s*\$([0-9.]+)/;
   const marginRegex = /Free Margin:\s*\$([0-9.]+).*?Margin Used:\s*([0-9.]+)%/;
   const statsRegex = /Rebalances:\s*(\d+).*?Fees Paid:\s*\$([0-9.]+)/;
-  const assetRegex = /[├└]─\s+(\w+)\s+\$\s*([0-9.]+)\s+([0-9.]+)%\s+([0-9.]+)%\s+([+-][0-9.]+)%\s+\$([0-9.]+)\s+\$([0-9.]+)\s+([+-]\$[0-9.]+)\s+([0-9.]+)/;
+  const assetRegex = /[├└]─\s+(\w+)\s+\$\s*([+-]?[0-9.]+)\s+([+-]?[0-9.]+)%\s+([+-]?[0-9.]+)%\s+([+-]?[0-9.]+)%\s+\$([0-9.]+)\s+\$([0-9.]+)\s+([+-]?\$[+-]?[0-9.]+)\s+([+-]?[0-9.]+)/;
 
   for (const line of lines) {
     if (!settings) {
@@ -93,7 +93,7 @@ export function parseLog(logText) {
           entry: parseFloat(aMatch[6]),
           mark: parseFloat(aMatch[7]),
           pnlStr: aMatch[8],
-          pnlValue: parseFloat(aMatch[8].replace('+$', '').replace('-$', '-')),
+          pnlValue: parseFloat(aMatch[8].replace('$', '').replace('+', '')),
           qty: parseFloat(aMatch[9])
         });
       }

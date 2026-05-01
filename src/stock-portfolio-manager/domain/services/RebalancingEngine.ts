@@ -277,24 +277,26 @@ export class RebalancingEngine {
         const actions: RebalanceAction[] = [];
 
         for (const asset of allocations) {
-            // What this position was worth at inception
-            const baselineValue = initialPortfolioValueUSDT * asset.targetWeight;
-            const excess = asset.currentValueUSDT - baselineValue;
+            // Sell exactly ROI_HARVEST_SELL_FRACTION (20%) of the current position value
+            const amountToSell = asset.currentValueUSDT * ROI_HARVEST_SELL_FRACTION;
 
-            // Only sell if there is meaningful excess above baseline
-            if (excess < MIN_NOTIONAL_USDT) continue;
+            // Only sell if there is meaningful amount to sell
+            if (amountToSell < MIN_NOTIONAL_USDT) continue;
 
             const quantityAsset =
-                asset.currentPrice > 0 ? excess / asset.currentPrice : 0;
+                asset.currentPrice > 0 ? amountToSell / asset.currentPrice : 0;
+            
+            const expectedNewValue = asset.currentValueUSDT - amountToSell;
+            const expectedNewWeight = expectedNewValue / (initialPortfolioValueUSDT * (1 + currentRoiPct / 100));
 
             actions.push({
                 symbol: asset.symbol,
                 side: "SELL",
-                amountUSDT: excess,
+                amountUSDT: amountToSell,
                 quantityAsset,
                 reason: "ROI_HARVEST",
                 fromWeight: asset.currentWeight,
-                toWeight: asset.targetWeight, // trimmed back to target
+                toWeight: expectedNewWeight,
             });
         }
 
@@ -415,7 +417,7 @@ export class RebalancingEngine {
             const quantityAsset =
                 asset.currentPrice > 0 ? buyAmount / asset.currentPrice : 0;
             const expectedNewValue = asset.currentValueUSDT + buyAmount;
-            const expectedNewWeight = expectedNewValue / totalPortfolioValue;
+            const expectedNewWeight = expectedNewValue / targetPortfolioValue;
 
             actions.push({
                 symbol: asset.symbol,
@@ -483,10 +485,26 @@ export class RebalancingEngine {
         const actions: RebalanceAction[] = [];
         let harvestProceeds = 0;
 
-        // Sell excess from overweight assets back to their target weight
+        // Sell excess from overweight assets.
+        // Excess is either:
+        //  1. Weight-based: (currentWeight - targetWeight) * totalPortfolioValue
+        //  2. PnL-based: Sell the unrealized profit if it exceeds assetProfitHarvestPct
         for (const asset of overweightAssets) {
             const targetValue = totalPortfolioValue * asset.targetWeight;
-            const excessValue = asset.currentValueUSDT - targetValue;
+            let excessValue = asset.currentValueUSDT - targetValue;
+
+            // PnL Harvest logic: if unrealized PnL >= threshold, sell the profit.
+            // This ensures we take gains even if the asset weight hasn't drifted much
+            // (e.g. if the whole portfolio grew together).
+            const pnlThreshold = config.assetProfitHarvestPct ?? 0;
+            const currentPnlPct = asset.unrealizedPnlPct ?? 0;
+            
+            if (pnlThreshold > 0 && currentPnlPct >= pnlThreshold) {
+                // Profit in USDT = currentValue * (pnl% / (100 + pnl%))
+                const pnlUSDT = asset.currentValueUSDT * (currentPnlPct / (100 + currentPnlPct));
+                // Sell the larger of the two excesses to ensure we actually collect the gain
+                excessValue = Math.max(excessValue, pnlUSDT);
+            }
 
             if (excessValue < MIN_NOTIONAL_USDT) continue;
 
