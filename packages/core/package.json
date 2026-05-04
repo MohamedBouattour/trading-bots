@@ -1,20 +1,16 @@
 {
   "name": "@trading-bots/core",
   "version": "2.0.0",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "tsc",
-    "test": "vitest run"
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch"
   },
   "dependencies": {
-    "axios": "^1.13.6",
-    "binance-api-node": "^0.13.8",
-    "dotenv": "^17.3.1"
+    "axios": "^1.6.0"
   },
   "devDependencies": {
-    "@types/node": "^25.3.3",
-    "typescript": "^5.9.3",
-    "vitest": "^4.0.18"
+    "typescript": "^5.4.0"
   }
 }

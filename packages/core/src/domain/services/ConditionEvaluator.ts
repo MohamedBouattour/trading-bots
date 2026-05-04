@@ -1,55 +1,56 @@
-import { Condition, ConditionGroup } from "../models/StrategyBlueprint";
+import type { ConditionGroup, Condition } from '../models/StrategyBlueprint.js';
+import type { IndicatorValues } from './IndicatorService.js';
 
-type IndicatorValues = Map<string, number>;
-type PriceContext = Record<string, number>;
+function resolveValue(ref: string | number, indicators: IndicatorValues, price: Record<string, number>): number {
+  if (typeof ref === 'number') return ref;
+  if (ref.startsWith('price.')) return price[ref.split('.')[1]] ?? NaN;
+  return indicators[ref] ?? NaN;
+}
 
-/**
- * Pure evaluator: resolves nested AND/OR condition groups against
- * computed indicator values and current price context.
- *
- * Supports:
- *  - Nested ConditionGroup (AND/OR trees of arbitrary depth)
- *  - Left/right referencing indicator ids, "price.*" fields, or literal numbers
- */
+function evaluateCondition(cond: Condition, indicators: IndicatorValues, price: Record<string, number>): boolean {
+  const left = resolveValue(cond.left, indicators, price);
+  const right = resolveValue(cond.right, indicators, price);
+  if (isNaN(left) || isNaN(right)) return false;
+
+  switch (cond.operator) {
+    case '>':  return left > right;
+    case '<':  return left < right;
+    case '>=': return left >= right;
+    case '<=': return left <= right;
+    case '==': return left === right;
+    case '!=': return left !== right;
+    default:   return false;
+  }
+}
+
+function evaluateGroup(
+  group: ConditionGroup,
+  indicators: IndicatorValues,
+  price: Record<string, number>
+): boolean {
+  const results = group.conditions.map((item) => {
+    if ('group' in item) {
+      return evaluateGroup((item as { group: ConditionGroup }).group, indicators, price);
+    }
+    return evaluateCondition(item as Condition, indicators, price);
+  });
+
+  return group.logic === 'AND' ? results.every(Boolean) : results.some(Boolean);
+}
+
 export class ConditionEvaluator {
-  static evaluate(
+  evaluate(
     group: ConditionGroup,
     indicators: IndicatorValues,
-    price: PriceContext
+    latestCandle: { close: number; open: number; high: number; low: number; volume: number }
   ): boolean {
-    const results = group.conditions.map((item) => {
-      if ("logic" in item) {
-        return ConditionEvaluator.evaluate(item as ConditionGroup, indicators, price);
-      }
-      return ConditionEvaluator.evaluateLeaf(item as Condition, indicators, price);
-    });
-    return group.logic === "AND" ? results.every(Boolean) : results.some(Boolean);
-  }
-
-  private static resolve(
-    ref: string | number,
-    indicators: IndicatorValues,
-    price: PriceContext
-  ): number {
-    if (typeof ref === "number") return ref;
-    if (ref.startsWith("price.")) return price[ref.slice(6)] ?? 0;
-    return indicators.get(ref) ?? 0;
-  }
-
-  private static evaluateLeaf(
-    cond: Condition,
-    indicators: IndicatorValues,
-    price: PriceContext
-  ): boolean {
-    const l = ConditionEvaluator.resolve(cond.left, indicators, price);
-    const r = ConditionEvaluator.resolve(cond.right, indicators, price);
-    switch (cond.operator) {
-      case ">": return l > r;
-      case "<": return l < r;
-      case ">=": return l >= r;
-      case "<=": return l <= r;
-      case "==": return l === r;
-      case "!=": return l !== r;
-    }
+    const price = {
+      close: latestCandle.close,
+      open: latestCandle.open,
+      high: latestCandle.high,
+      low: latestCandle.low,
+      volume: latestCandle.volume,
+    };
+    return evaluateGroup(group, indicators, price);
   }
 }

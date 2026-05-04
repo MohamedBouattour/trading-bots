@@ -1,101 +1,147 @@
-/**
- * Engine entry point.
- *
- * Automatically discovers all strategy blueprints in /strategies/*.json
- * and runs each one in its own loop. No strategy code lives here —
- * only wiring: blueprint → adapters → ExecuteStrategyUseCase.
- *
- * Usage:
- *   npm run start --workspace=packages/engine          # live trading
- *   DRY_RUN=true npm run start --workspace=packages/engine  # dry run
- */
-import * as dotenv from "dotenv";
-import * as path from "path";
-import * as fs from "fs";
-
+import fs from 'fs/promises';
+import path from 'path';
+import express from 'express';
+import cors from 'cors';
 import {
   BinanceAdapter,
   ConsoleLogger,
   FileStateStore,
   ExecuteStrategyUseCase,
-  StrategyBlueprint,
-} from "@trading-bots/core";
+  type StrategyBlueprint,
+} from '@trading-bots/core';
 
-dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
+const STRATEGIES_DIR = process.env.STRATEGIES_DIR ?? './strategies';
+const STATES_DIR = process.env.STATES_DIR ?? './states';
+const DASHBOARD_PORT = Number(process.env.DASHBOARD_PORT ?? 3001);
+const LOG_LEVEL = (process.env.LOG_LEVEL ?? 'info') as 'debug' | 'info' | 'warn' | 'error';
 
-const isDryRun  = process.env.DRY_RUN === "true";
-const strategiesDir = path.resolve(process.env.STRATEGIES_DIR ?? path.join(__dirname, "../../../strategies"));
-const statesDir     = path.resolve(process.env.STATES_DIR     ?? path.join(__dirname, "../../../states"));
+const logger = new ConsoleLogger(LOG_LEVEL);
+const stateStore = new FileStateStore(STATES_DIR);
 
-function loadBlueprints(): StrategyBlueprint[] {
-  if (!fs.existsSync(strategiesDir)) {
-    console.warn(`[Engine] strategies dir not found: ${strategiesDir}`);
-    return [];
+const binance = new BinanceAdapter(
+  process.env.BINANCE_API_KEY ?? '',
+  process.env.BINANCE_SECRET_KEY ?? '',
+  process.env.BINANCE_TESTNET === 'true'
+);
+
+async function loadBlueprints(): Promise<StrategyBlueprint[]> {
+  const files = (await fs.readdir(STRATEGIES_DIR)).filter((f) => f.endsWith('.json'));
+  const blueprints: StrategyBlueprint[] = [];
+  for (const file of files) {
+    const raw = await fs.readFile(path.join(STRATEGIES_DIR, file), 'utf-8');
+    try {
+      blueprints.push(JSON.parse(raw) as StrategyBlueprint);
+    } catch (e) {
+      logger.error(`Failed to parse blueprint: ${file}`, { error: String(e) });
+    }
   }
-  return fs
-    .readdirSync(strategiesDir)
-    .filter((f) => f.endsWith(".json"))
-    .map((f) => {
-      const content = fs.readFileSync(path.join(strategiesDir, f), "utf-8");
-      return JSON.parse(content) as StrategyBlueprint;
-    });
+  return blueprints;
 }
 
-async function runBlueprint(blueprint: StrategyBlueprint): Promise<void> {
-  const logger = new ConsoleLogger();
-  logger.info(`▶ Starting strategy: "${blueprint.name}" [${blueprint.id}]`);
-
-  if (isDryRun) {
-    logger.warn(`[DRY RUN] Blueprint loaded, no orders will be placed.`);
-    logger.info(JSON.stringify(blueprint, null, 2));
-    return;
-  }
-
-  const adapter = new BinanceAdapter(
-    process.env.BINANCE_API_KEY ?? "",
-    process.env.BINANCE_API_SECRET ?? "",
-    logger
-  );
-
-  await adapter.syncTime();
-
-  const stateStore = new FileStateStore(statesDir);
-  const useCase    = new ExecuteStrategyUseCase(adapter, adapter, stateStore, logger);
-
-  const intervalMs = blueprint.loop.intervalSeconds * 1000;
-
-  const tick = async () => {
+async function runCycle(blueprints: StrategyBlueprint[]): Promise<void> {
+  for (const blueprint of blueprints) {
+    const useCase = new ExecuteStrategyUseCase(binance, binance, stateStore, logger);
     try {
       await useCase.run(blueprint);
     } catch (err) {
-      logger.error(`[${blueprint.id}] Unhandled error: ${String(err)}`);
+      logger.error('Strategy run failed', { strategyId: blueprint.id, error: String(err) });
     }
-  };
-
-  // Run immediately, then on interval
-  await tick();
-  setInterval(tick, intervalMs);
+  }
 }
 
-async function main() {
-  const blueprints = loadBlueprints();
+async function startApiServer(): Promise<void> {
+  const app = express();
+  app.use(cors());
+  app.use(express.json());
 
+  // List all strategy states
+  app.get('/api/states', async (_req, res) => {
+    try {
+      const files = (await fs.readdir(STATES_DIR)).filter((f) => f.endsWith('.state.json'));
+      const states = await Promise.all(
+        files.map(async (f) => {
+          const raw = await fs.readFile(path.join(STATES_DIR, f), 'utf-8');
+          return JSON.parse(raw);
+        })
+      );
+      res.json(states);
+    } catch {
+      res.json([]);
+    }
+  });
+
+  // Get specific strategy state
+  app.get('/api/states/:id', async (req, res) => {
+    const state = await stateStore.load(req.params.id);
+    if (!state) return res.status(404).json({ error: 'State not found' });
+    return res.json(state);
+  });
+
+  // List all blueprints
+  app.get('/api/blueprints', async (_req, res) => {
+    const blueprints = await loadBlueprints();
+    res.json(blueprints);
+  });
+
+  // Get specific blueprint
+  app.get('/api/blueprints/:id', async (req, res) => {
+    const blueprints = await loadBlueprints();
+    const found = blueprints.find((b) => b.id === req.params.id);
+    if (!found) return res.status(404).json({ error: 'Blueprint not found' });
+    return res.json(found);
+  });
+
+  // SSE — live equity stream
+  app.get('/api/states/:id/stream', async (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    const send = async () => {
+      const state = await stateStore.load(req.params.id);
+      if (state) res.write(`data: ${JSON.stringify(state)}\n\n`);
+    };
+    await send();
+    const interval = setInterval(send, 10_000);
+    req.on('close', () => clearInterval(interval));
+  });
+
+  app.listen(DASHBOARD_PORT, () => {
+    logger.info(`Engine API listening on port ${DASHBOARD_PORT}`);
+  });
+}
+
+async function main(): Promise<void> {
+  await startApiServer();
+  logger.info('Trading bot engine started');
+
+  const blueprints = await loadBlueprints();
   if (blueprints.length === 0) {
-    console.log([
-      "",
-      "  No strategy blueprints found.",
-      `  Drop a .json file into: ${strategiesDir}`,
-      "  See strategies/README.md for the BPML schema.",
-      "",
-    ].join("\n"));
-    return;
+    logger.warn('No strategy blueprints found in ' + STRATEGIES_DIR);
+  } else {
+    logger.info(`Loaded ${blueprints.length} blueprint(s)`, { ids: blueprints.map((b) => b.id) });
   }
 
-  console.log(`\n[Engine] Loaded ${blueprints.length} blueprint(s):`);
-  blueprints.forEach((b) => console.log(`  \u2022 ${b.name} (${b.id}) — ${b.symbols.join(", ")}  ⏱ every ${b.loop.intervalSeconds}s`));
-  console.log("");
+  // Initial run
+  await runCycle(blueprints);
 
-  await Promise.all(blueprints.map(runBlueprint));
+  // Schedule per-strategy intervals
+  for (const blueprint of blueprints) {
+    const intervalMs = blueprint.loop.intervalSeconds * 1000;
+    setInterval(async () => {
+      const freshBlueprints = await loadBlueprints();
+      const fresh = freshBlueprints.find((b) => b.id === blueprint.id);
+      if (fresh) {
+        const useCase = new ExecuteStrategyUseCase(binance, binance, stateStore, logger);
+        await useCase.run(fresh).catch((e) =>
+          logger.error('Scheduled run failed', { strategyId: fresh.id, error: String(e) })
+        );
+      }
+    }, intervalMs);
+    logger.info(`Scheduled ${blueprint.id} every ${blueprint.loop.intervalSeconds}s`);
+  }
 }
 
-main().catch(console.error);
+main().catch((e) => {
+  console.error('Fatal error:', e);
+  process.exit(1);
+});

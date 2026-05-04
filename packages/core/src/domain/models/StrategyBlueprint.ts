@@ -1,86 +1,58 @@
-/**
- * StrategyBlueprint — visual logic schema (BPML)
- *
- * A strategy is defined entirely as JSON metadata.
- * The engine reads this schema and executes it generically.
- * No strategy logic lives in code — only the interpreter does.
- *
- * Condition tree supports nested AND/OR groups.
- * Rules are evaluated in ascending priority order — first match wins.
- */
+export type Timeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1d';
+export type IndicatorType = 'RSI' | 'SMA' | 'EMA' | 'ATR' | 'VWAP' | 'VOLUME_MA' | 'MACD' | 'BB';
+export type ActionType = 'BUY' | 'SELL' | 'CLOSE' | 'HOLD';
+export type LogicOperator = 'AND' | 'OR';
+export type ComparisonOperator = '>' | '<' | '>=' | '<=' | '==' | '!=';
+export type SizeMode = 'pct_balance' | 'pct_position' | 'fixed_usd';
 
-export type Timeframe = "1m" | "3m" | "5m" | "15m" | "30m" | "1h" | "4h" | "1d" | "1w";
-
-export type IndicatorType =
-  | "SMA" | "EMA" | "RSI" | "ATR" | "MACD" | "BBANDS"
-  | "STOCH" | "ADX" | "VOLUME_MA" | "VWAP";
-
-export type ComparisonOperator = ">" | "<" | ">=" | "<=" | "==" | "!=";
-export type LogicalOperator = "AND" | "OR";
-export type ActionType = "BUY" | "SELL" | "HOLD" | "CLOSE_ALL" | "SET_SL" | "SET_TP";
-
-/** An indicator declaration with its parameters */
 export interface IndicatorDeclaration {
-  id: string;                     // e.g. "fast_sma"
+  id: string;
   type: IndicatorType;
-  params: Record<string, number>; // e.g. { period: 14 }
+  params: Record<string, number>;
   timeframe: Timeframe;
 }
 
-/** A single leaf condition */
 export interface Condition {
-  left: string;                   // indicator id or "price.close" | "price.volume"
+  left: string;   // indicator id or 'price.close' | 'price.volume' | 'price.high' | 'price.low'
   operator: ComparisonOperator;
-  right: string | number;         // indicator id OR literal number
+  right: number | string; // scalar or another indicator id
 }
 
-/** A condition group with AND/OR logic, supports nesting */
 export interface ConditionGroup {
-  logic: LogicalOperator;
-  conditions: Array<Condition | ConditionGroup>;
+  logic: LogicOperator;
+  conditions: (Condition | { group: ConditionGroup })[];
 }
 
-/** A rule: when conditionGroup is satisfied, fire action */
-export interface StrategyRule {
+export interface ActionParams {
+  sizeMode: SizeMode;
+  sizeValue: number;     // percent or USD depending on sizeMode
+  leverage?: number;
+}
+
+export interface Rule {
   id: string;
   name: string;
-  priority: number;               // lower = higher priority; first match wins
+  priority: number;      // lower = higher priority
   conditionGroup: ConditionGroup;
   action: ActionType;
-  params?: {
-    sizeMode?: "fixed" | "pct_balance" | "kelly";
-    sizeValue?: number;           // USDT or % depending on sizeMode
-    slPct?: number;               // stop-loss % from entry
-    tpPct?: number;               // take-profit % from entry
-    leverage?: number;
-  };
+  params: ActionParams;
 }
 
-/** Loop / scheduler config for bot execution */
-export interface LoopConfig {
-  intervalSeconds: number;
-  maxRuntimeSeconds?: number;
+export interface RiskConfig {
+  maxDrawdownPct: number;
+  maxPositionPct: number;
+  dailyLossLimitPct: number;
+  stopLossMode?: 'atr' | 'fixed_pct';
+  stopLossAtrMultiplier?: number;
+  stopLossFixedPct?: number;
 }
 
-/** Top-level strategy blueprint — the only thing you need to write a strategy */
 export interface StrategyBlueprint {
   id: string;
   name: string;
-  version: string;
-  description: string;
-  symbols: string[];              // e.g. ["BTCUSDT", "ETHUSDT"]
-  defaultTimeframe: Timeframe;
+  symbols: string[];
   indicators: IndicatorDeclaration[];
-  rules: StrategyRule[];          // evaluated in priority order
-  loop: LoopConfig;
-  riskManagement: {
-    maxDrawdownPct: number;       // halt bot if drawdown exceeds this
-    maxPositionPct: number;       // max % of total equity per position
-    dailyLossLimitPct: number;    // halt if daily loss exceeds this
-  };
-  metadata: {
-    author: string;
-    createdAt: string;
-    tags: string[];
-  };
+  rules: Rule[];
+  loop: { intervalSeconds: number };
+  riskManagement: RiskConfig;
 }
