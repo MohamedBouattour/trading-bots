@@ -1,15 +1,26 @@
-import { TradeRecord } from "./TradeRecord";
+import type { TradeRecord } from './TradeRecord.js';
+
+export interface EquityPoint {
+  timestamp: number;
+  equity: number;
+}
+
+export interface RuleHitCount {
+  ruleId: string;
+  count: number;
+}
 
 export interface BotState {
   strategyId: string;
-  lastRunAt: number;       // unix ms
-  runCount: number;
-  equityHistory: Array<{ ts: number; equity: number }>;
+  status: 'running' | 'halted' | 'idle';
+  lastRunAt: number;          // unix ms
   openTrades: TradeRecord[];
   closedTrades: TradeRecord[];
-  dailyPnl: number;
-  totalPnl: number;
-  maxDrawdown: number;
-  halted: boolean;
+  equityHistory: EquityPoint[];
+  ruleHits: RuleHitCount[];
+  initialBalance: number;
+  currentBalance: number;
+  dailyLoss: number;
+  dailyLossResetAt: number;
   haltReason?: string;
 }

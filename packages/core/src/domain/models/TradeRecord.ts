@@ -1,20 +1,20 @@
-export type TradeDirection = "BUY" | "SELL";
-export type TradeStatus = "OPEN" | "CLOSED" | "CANCELLED";
+export type TradeDirection = 'LONG' | 'SHORT';
+export type TradeStatus = 'OPEN' | 'CLOSED';
 
 export interface TradeRecord {
   id: string;
   strategyId: string;
   symbol: string;
   direction: TradeDirection;
+  status: TradeStatus;
   entryPrice: number;
   exitPrice?: number;
   quantity: number;
-  sizeUSDT: number;
-  pnl?: number;
+  leverage: number;
+  entryTime: number;   // unix ms
+  exitTime?: number;
+  pnlUsd?: number;
   pnlPct?: number;
-  openedAt: number;   // unix ms
-  closedAt?: number;
-  status: TradeStatus;
-  ruleId: string;     // which rule triggered this trade
-  tags: string[];
+  triggeredRuleId: string;
+  closedByRuleId?: string;
 }
