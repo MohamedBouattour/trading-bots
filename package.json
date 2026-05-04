@@ -1,38 +1,25 @@
 {
   "name": "trading-bots",
-  "version": "1.0.0",
-  "description": "Trading Bots Monorepo — HODL Portfolio Rebalancer for Binance.",
-  "main": "index.js",
+  "version": "2.0.0",
+  "description": "Trading Bots Monorepo — Metadata-driven generic strategy engine",
+  "private": true,
+  "workspaces": ["packages/*"],
   "scripts": {
-    "build": "esbuild src/stock-portfolio-manager/presentation/cli/run_rebalancer.ts --bundle --platform=node --outfile=dist/rebalancer.js",
-    "build:dashboard": "cd dashboard && npm run build",
-    "rebalancer": "ts-node src/stock-portfolio-manager/presentation/cli/run_rebalancer.ts",
-    "rebalancer:loop": "ts-node src/stock-portfolio-manager/presentation/cli/run_rebalancer.ts --loop",
-    "rebalancer:dry": "ts-node src/stock-portfolio-manager/presentation/cli/dry_run.ts",
-    "rebalancer:init": "ts-node src/stock-portfolio-manager/presentation/cli/run_rebalancer.ts --init",
-    "test": "vitest run"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
-  "dependencies": {
-    "@types/node": "^25.3.3",
-    "@types/papaparse": "^5.5.2",
-    "axios": "^1.13.6",
-    "binance-api-node": "^0.13.8",
-    "dotenv": "^17.3.1",
-    "papaparse": "^5.5.3",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
+    "dev": "concurrently \"npm run dev --workspace=packages/engine\" \"npm run dev --workspace=packages/dashboard\"",
+    "build": "npm run build --workspaces",
+    "test": "vitest run",
+    "engine:run": "npm run start --workspace=packages/engine",
+    "engine:dry": "npm run dry --workspace=packages/engine",
+    "dashboard": "npm run dev --workspace=packages/dashboard"
   },
   "devDependencies": {
+    "concurrently": "^8.2.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18",
     "@eslint/js": "^10.0.1",
-    "esbuild": "^0.27.3",
     "eslint": "^10.0.2",
     "globals": "^17.4.0",
     "jiti": "^2.6.1",
-    "typescript-eslint": "^8.56.1",
-    "vitest": "^4.0.18"
+    "typescript-eslint": "^8.56.1"
   }
 }
