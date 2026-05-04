@@ -77,14 +77,14 @@ async function startApiServer(): Promise<void> {
     return res.json(state);
   });
 
-  // List all blueprints
-  app.get('/api/blueprints', async (_req, res) => {
+  // List all strategies
+  app.get('/api/strategies', async (_req, res) => {
     const blueprints = await loadBlueprints();
     res.json(blueprints);
   });
 
-  // Get specific blueprint
-  app.get('/api/blueprints/:id', async (req, res) => {
+  // Get specific strategy
+  app.get('/api/strategies/:id', async (req, res) => {
     const blueprints = await loadBlueprints();
     const found = blueprints.find((b) => b.id === req.params.id);
     if (!found) return res.status(404).json({ error: 'Blueprint not found' });

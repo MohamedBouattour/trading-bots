@@ -3,14 +3,13 @@
   "version": "2.0.0",
   "private": true,
   "workspaces": [
-    "packages/*",
-    "dashboard"
+    "packages/*"
   ],
   "scripts": {
-    "build": "npm run build --workspaces --if-present",
-    "dev": "concurrently \"npm run dev -w packages/engine\" \"npm run dev -w dashboard\"",
+    "build": "pnpm -r build",
+    "dev": "concurrently \"pnpm -F @trading-bots/engine dev\" \"pnpm -F @trading-bots/dashboard dev\"",
     "test": "vitest run",
-    "lint": "eslint packages dashboard --ext .ts,.tsx"
+    "lint": "eslint packages --ext .ts,.tsx"
   },
   "devDependencies": {
     "concurrently": "^8.2.0",
