@@ -2,46 +2,58 @@ export interface TradeRecord {
   id: string;
   strategyId: string;
   symbol: string;
-  direction: 'BUY' | 'SELL';
+  direction: 'LONG' | 'SHORT';
+  status: 'OPEN' | 'CLOSED';
   entryPrice: number;
   exitPrice?: number;
   quantity: number;
-  sizeUSDT: number;
-  pnl?: number;
+  leverage: number;
+  entryTime: number;
+  exitTime?: number;
+  pnlUsd?: number;
   pnlPct?: number;
-  openedAt: number;
-  closedAt?: number;
-  status: 'OPEN' | 'CLOSED' | 'CANCELLED';
-  ruleId: string;
-  tags: string[];
+  triggeredRuleId: string;
+  closedByRuleId?: string;
 }
 
 export interface BotState {
   strategyId: string;
+  status: 'running' | 'halted' | 'idle';
   lastRunAt: number;
-  runCount: number;
-  equityHistory: Array<{ ts: number; equity: number }>;
   openTrades: TradeRecord[];
   closedTrades: TradeRecord[];
-  dailyPnl: number;
-  totalPnl: number;
-  maxDrawdown: number;
-  halted: boolean;
+  equityHistory: Array<{ timestamp: number; equity: number }>;
+  ruleHits: Array<{ ruleId: string; count: number }>;
+  initialBalance: number;
+  currentBalance: number;
+  dailyLoss: number;
+  dailyLossResetAt: number;
   haltReason?: string;
 }
 
 export interface StrategyBlueprint {
   id: string;
   name: string;
-  version: string;
-  description: string;
   symbols: string[];
-  indicators: Array<{ id: string; type: string; params: Record<string, number>; timeframe: string }>;
-  rules: Array<{
-    id: string; name: string; priority: number; action: string;
-    conditionGroup: unknown; params?: Record<string, unknown>;
-  }>;
   loop: { intervalSeconds: number };
-  riskManagement: { maxDrawdownPct: number; maxPositionPct: number; dailyLossLimitPct: number };
-  metadata: { author: string; createdAt: string; tags: string[] };
+  indicators: Array<{
+    id: string;
+    type: string;
+    params: Record<string, number>;
+    timeframe: string;
+  }>;
+  rules: Array<{
+    id: string;
+    priority: number;
+    action: string;
+    conditionGroup: any;
+    params: Record<string, any>;
+  }>;
+  riskManagement: {
+    maxPositionPct: number;
+    stopLossPct?: number;
+    takeProfitPct?: number;
+    trailingStopPct?: number;
+    maxDailyLossPct?: number;
+  };
 }

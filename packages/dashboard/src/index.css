@@ -14,6 +14,8 @@
   --error: #ef4444;
   --warning: #f59e0b;
   --radius: 0.5rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
   --shadow: 0 4px 20px rgba(0,0,0,0.4);
 }
 

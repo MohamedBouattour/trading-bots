@@ -91,6 +91,47 @@ async function startApiServer(): Promise<void> {
     return res.json(found);
   });
 
+  // Create strategy
+  app.post('/api/strategies', async (req, res) => {
+    const blueprint = req.body as StrategyBlueprint;
+    if (!blueprint.id) return res.status(400).json({ error: 'Missing strategy ID' });
+    const filePath = path.join(STRATEGIES_DIR, `${blueprint.id}.json`);
+    await fs.writeFile(filePath, JSON.stringify(blueprint, null, 2));
+    logger.info(`Created strategy blueprint: ${blueprint.id}`);
+    res.status(201).json(blueprint);
+  });
+
+  // Update strategy
+  app.put('/api/strategies/:id', async (req, res) => {
+    const blueprint = req.body as StrategyBlueprint;
+    const filePath = path.join(STRATEGIES_DIR, `${req.params.id}.json`);
+    
+    // Check if it exists (might be renamed if ID changed, but we use :id from path)
+    try {
+      await fs.access(filePath);
+    } catch {
+      // If filename doesn't match ID, we might need to find the file. 
+      // For simplicity, we assume filename is {id}.json
+      return res.status(404).json({ error: 'Strategy file not found' });
+    }
+
+    await fs.writeFile(filePath, JSON.stringify(blueprint, null, 2));
+    logger.info(`Updated strategy blueprint: ${req.params.id}`);
+    res.json(blueprint);
+  });
+
+  // Delete strategy
+  app.delete('/api/strategies/:id', async (req, res) => {
+    const filePath = path.join(STRATEGIES_DIR, `${req.params.id}.json`);
+    try {
+      await fs.unlink(filePath);
+      logger.info(`Deleted strategy blueprint: ${req.params.id}`);
+      res.status(204).send();
+    } catch (e) {
+      res.status(404).json({ error: 'Strategy not found' });
+    }
+  });
+
   // SSE — live equity stream
   app.get('/api/states/:id/stream', async (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
