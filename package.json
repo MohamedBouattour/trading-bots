@@ -1,25 +1,21 @@
 {
   "name": "trading-bots",
   "version": "2.0.0",
-  "description": "Trading Bots Monorepo — Metadata-driven generic strategy engine",
   "private": true,
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*",
+    "dashboard"
+  ],
   "scripts": {
-    "dev": "concurrently \"npm run dev --workspace=packages/engine\" \"npm run dev --workspace=packages/dashboard\"",
-    "build": "npm run build --workspaces",
+    "build": "npm run build --workspaces --if-present",
+    "dev": "concurrently \"npm run dev -w packages/engine\" \"npm run dev -w dashboard\"",
     "test": "vitest run",
-    "engine:run": "npm run start --workspace=packages/engine",
-    "engine:dry": "npm run dry --workspace=packages/engine",
-    "dashboard": "npm run dev --workspace=packages/dashboard"
+    "lint": "eslint packages dashboard --ext .ts,.tsx"
   },
   "devDependencies": {
     "concurrently": "^8.2.0",
-    "typescript": "^5.9.3",
-    "vitest": "^4.0.18",
-    "@eslint/js": "^10.0.1",
-    "eslint": "^10.0.2",
-    "globals": "^17.4.0",
-    "jiti": "^2.6.1",
-    "typescript-eslint": "^8.56.1"
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0",
+    "eslint": "^9.0.0"
   }
 }

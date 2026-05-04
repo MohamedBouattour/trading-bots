@@ -1,33 +1,51 @@
-# 📈 HODL Portfolio Rebalancer & Compounder
+# trading-bots v2 — Metadata-Driven Strategy Engine
 
-An advanced algorithmic portfolio manager for cryptocurrency assets on Binance (Spot & Futures).
+## Architecture
 
-## 🚀 Key Features
-- **Auto-Scale Growth Engine**: Automatically updates portfolio value to capture and reinvest gains.
-- **Continuous Compounding**: Idle USDT (margin) ≥ $10 is automatically distributed across underweight assets.
-- **Drift Rebalancing**: Automatically sells overweight positions and buys underweight ones to maintain target allocations.
-- **ROI Harvesting**: Captures profits when individual assets exceed a set ceiling (e.g., 35%).
-- **Leverage Support**: Native support for Binance Futures with margin-aware quantity calculations.
-- **State Persistence**: Tracks portfolio history and high-water marks in a local JSON state store.
+This is a **monorepo** (npm workspaces) with three packages:
 
-## 📁 Directory Structure
+| Package | Purpose |
+|---|---|
+| `packages/core` | Domain models, ports (interfaces), indicator math, condition evaluator |
+| `packages/engine` | Generic runtime — discovers `strategies/*.json` and executes them |
+| `dashboard` | React + Vite UI showing equity curves, trades, and a blueprint editor |
+
+## The Core Idea — BPML (Blueprint Metadata Language)
+
+Strategies are **pure JSON** — no code. The engine interprets them generically.
+
+```json
+{
+  "id": "rsi-trend-v1",
+  "indicators": [{"id": "rsi14", "type": "RSI", "params": {"period": 14}}],
+  "rules": [{
+    "conditionGroup": {"logic": "AND", "conditions": [{"left": "rsi14", "operator": ">", "right": 50}]},
+    "action": "BUY"
+  }]
+}
 ```
-src/
-├── stock-portfolio-manager/ # Main rebalancer module
-│   ├── application/         # Use cases (Rebalance, Initialize)
-│   ├── domain/              # Core engine (RebalancingEngine, Models)
-│   ├── infrastructure/      # Adapters (Binance, File Store, Logger)
-│   └── presentation/        # CLI (Dry Run, Live Rebalancer)
-├── shared/                  # Common utilities and math
+
+## Quick Start
+
+```bash
+npm install
+cp .env.example .env  # fill in your Binance keys
+npm run dev
 ```
 
-## 🛠 Setup
-1. Clone the repository.
-2. Install dependencies: `npm install`.
-3. Configure your portfolio in `src/stock-portfolio-manager/infrastructure/config/config_longterm.json`.
-4. Create a `.env` file with your Binance API keys.
-5. Run a dry run: `npm run rebalancer:dry`.
-6. Start the rebalancer loop: `npm run rebalancer:loop`.
+## Adding a Strategy
 
-## ⚖️ License
-ISC
+1. Create `strategies/my-strategy.json` using the [BPML schema](strategies/README.md)
+2. Engine picks it up automatically on next start — **zero code changes**
+
+## Project Structure
+
+```
+trading-bots/
+├── packages/
+│   ├── core/          ← @trading-bots/core
+│   └── engine/        ← @trading-bots/engine
+├── dashboard/         ← React dashboard
+├── strategies/        ← BPML JSON blueprints
+└── states/            ← runtime state per strategy (auto-generated)
+```

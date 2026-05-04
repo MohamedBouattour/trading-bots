@@ -1,61 +1,49 @@
 {
   "id": "rsi-trend-v1",
   "name": "RSI + SMA Trend Strategy",
-  "version": "1.0.0",
-  "description": "Buys when RSI > 50 and price is above SMA200 (uptrend confirmed). Exits when RSI drops below 40.",
   "symbols": ["BTCUSDT", "ETHUSDT"],
-  "defaultTimeframe": "1h",
   "indicators": [
-    { "id": "rsi14",  "type": "RSI", "params": { "period": 14 },  "timeframe": "1h" },
-    { "id": "sma200", "type": "SMA", "params": { "period": 200 }, "timeframe": "1h" },
-    { "id": "sma50",  "type": "SMA", "params": { "period": 50 },  "timeframe": "1h" }
+    { "id": "rsi14",  "type": "RSI",  "params": { "period": 14 }, "timeframe": "1h" },
+    { "id": "sma200", "type": "SMA",  "params": { "period": 200 }, "timeframe": "1h" },
+    { "id": "atr14",  "type": "ATR",  "params": { "period": 14 }, "timeframe": "1h" }
   ],
   "rules": [
     {
       "id": "buy-signal",
-      "name": "RSI momentum + above SMA200",
+      "name": "RSI momentum + price above SMA200",
       "priority": 1,
       "conditionGroup": {
         "logic": "AND",
         "conditions": [
-          { "left": "rsi14",      "operator": ">", "right": 50 },
-          { "left": "price.close","operator": ">", "right": "sma200" },
-          { "left": "sma50",      "operator": ">", "right": "sma200" }
+          { "left": "rsi14",       "operator": ">",  "right": 50 },
+          { "left": "rsi14",       "operator": "<",  "right": 70 },
+          { "left": "price.close", "operator": ">",  "right": "sma200" }
         ]
       },
       "action": "BUY",
-      "params": { "sizeMode": "pct_balance", "sizeValue": 10, "leverage": 2, "slPct": 3, "tpPct": 9 }
+      "params": { "sizeMode": "pct_balance", "sizeValue": 10, "leverage": 2 }
     },
     {
       "id": "sell-signal",
-      "name": "RSI oversold exit",
+      "name": "RSI overbought exit",
       "priority": 2,
       "conditionGroup": {
-        "logic": "AND",
+        "logic": "OR",
         "conditions": [
-          { "left": "rsi14", "operator": "<", "right": 40 }
+          { "left": "rsi14", "operator": ">=", "right": 70 },
+          { "left": "price.close", "operator": "<", "right": "sma200" }
         ]
       },
       "action": "SELL",
-      "params": { "sizeMode": "pct_balance", "sizeValue": 100 }
-    },
-    {
-      "id": "hold",
-      "name": "No signal — hold",
-      "priority": 99,
-      "conditionGroup": { "logic": "AND", "conditions": [] },
-      "action": "HOLD"
+      "params": { "sizeMode": "pct_position", "sizeValue": 100 }
     }
   ],
   "loop": { "intervalSeconds": 3600 },
   "riskManagement": {
     "maxDrawdownPct": 20,
     "maxPositionPct": 15,
-    "dailyLossLimitPct": 5
-  },
-  "metadata": {
-    "author": "MohamedBouattour",
-    "createdAt": "2025-01-01",
-    "tags": ["trend", "rsi", "sma"]
+    "dailyLossLimitPct": 5,
+    "stopLossMode": "atr",
+    "stopLossAtrMultiplier": 2
   }
 }
