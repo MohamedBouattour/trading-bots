@@ -1,22 +1,14 @@
-export interface TradeResult {
-  orderId: string;
-  symbol: string;
-  side: "BUY" | "SELL";
-  executedQty: number;
-  executedPrice: number;
-  commission: number;
-  status: "FILLED" | "PARTIALLY_FILLED" | "FAILED";
-}
-
-export interface SymbolConstraints {
-  minNotional: number;
-  stepSize: string;
-  tickSize: string;
-  minQty: string;
-}
+import type { ActionType, ActionParams } from '../../domain/models/StrategyBlueprint.js';
+import type { TradeRecord } from '../../domain/models/TradeRecord.js';
 
 export interface ITradeExecutor {
-  executeMarketOrder(symbol: string, side: "BUY" | "SELL", amountUSDT: number): Promise<TradeResult>;
-  setLeverage(symbol: string, leverage: number): Promise<void>;
-  getSymbolConstraints(symbol: string): Promise<SymbolConstraints>;
+  execute(
+    symbol: string,
+    action: ActionType,
+    params: ActionParams,
+    currentPrice: number,
+    balance: number
+  ): Promise<TradeRecord>;
+
+  closePosition(trade: TradeRecord, currentPrice: number): Promise<TradeRecord>;
 }
