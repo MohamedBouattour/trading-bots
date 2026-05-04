@@ -1,0 +1,50 @@
+{
+  "id": "macd-crossover-v1",
+  "name": "MACD Crossover — BTC/USDT 1h",
+  "symbols": ["BTCUSDT"],
+  "indicators": [
+    { "id": "macdLine",   "type": "MACD", "params": { "fast": 12, "slow": 26 }, "timeframe": "1h" },
+    { "id": "macdSignal", "type": "MACD", "params": { "fast": 9,  "slow": 26 }, "timeframe": "1h" },
+    { "id": "atr14",      "type": "ATR",  "params": { "period": 14 },            "timeframe": "1h" }
+  ],
+  "rules": [
+    {
+      "id": "macd-bullish-cross",
+      "name": "MACD bullish crossover",
+      "priority": 1,
+      "conditionGroup": {
+        "logic": "AND",
+        "conditions": [
+          { "left": "macdLine", "operator": ">", "right": 0 },
+          { "left": "macdLine", "operator": ">", "right": "macdSignal" }
+        ]
+      },
+      "action": "BUY",
+      "params": { "sizeMode": "pct_balance", "sizeValue": 10, "leverage": 1 }
+    },
+    {
+      "id": "macd-bearish-cross",
+      "name": "MACD bearish crossover",
+      "priority": 2,
+      "conditionGroup": {
+        "logic": "AND",
+        "conditions": [
+          { "left": "macdLine", "operator": "<", "right": 0 },
+          { "left": "macdLine", "operator": "<", "right": "macdSignal" }
+        ]
+      },
+      "action": "CLOSE",
+      "params": { "sizeMode": "pct_position", "sizeValue": 100 }
+    }
+  ],
+  "loop": { "intervalSeconds": 3600 },
+  "riskManagement": {
+    "maxDrawdownPct": 15,
+    "maxPositionPct": 15,
+    "dailyLossLimitPct": 5,
+    "stopLossMode": "atr",
+    "stopLossAtrMultiplier": 2,
+    "trailingStopPct": 3,
+    "takeProfitPct": 8
+  }
+}

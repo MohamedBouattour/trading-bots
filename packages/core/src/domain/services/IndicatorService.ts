@@ -3,6 +3,8 @@ import type { IndicatorDeclaration } from '../models/StrategyBlueprint.js';
 
 export type IndicatorValues = Record<string, number>;
 
+// ─── Primitive math helpers ───────────────────────────────────────────────────
+
 function sma(values: number[], period: number): number {
   const slice = values.slice(-period);
   if (slice.length < period) return NaN;
@@ -55,6 +57,39 @@ function vwap(candles: Candle[]): number {
   return totalVolume === 0 ? NaN : totalPV / totalVolume;
 }
 
+/**
+ * MACD — returns the MACD line value (fastEMA − slowEMA).
+ * params: { fast?: number; slow?: number }
+ * Default: fast=12, slow=26.
+ * Use a second declaration with type 'MACD' and params.signal=9 to get the signal line
+ * by comparing two MACD declarations in a condition.
+ */
+function macd(closes: number[], fast: number, slow: number): number {
+  if (closes.length < slow) return NaN;
+  return ema(closes, fast) - ema(closes, slow);
+}
+
+/**
+ * Bollinger Bands — returns one of three bands depending on params.band:
+ *   band =  1  → upper band  (mean + k*σ)
+ *   band =  0  → middle band (SMA)
+ *   band = -1  → lower band  (mean − k*σ)
+ * params: { period?: number; stdDev?: number; band: -1 | 0 | 1 }
+ */
+function bollingerBand(closes: number[], period: number, stdDevMult: number, band: number): number {
+  if (closes.length < period) return NaN;
+  const mean = sma(closes, period);
+  if (isNaN(mean)) return NaN;
+  const slice = closes.slice(-period);
+  const variance = slice.reduce((sum, v) => sum + (v - mean) ** 2, 0) / period;
+  const std = Math.sqrt(variance);
+  if (band === 1)  return mean + stdDevMult * std;
+  if (band === -1) return mean - stdDevMult * std;
+  return mean; // band === 0
+}
+
+// ─── Service ──────────────────────────────────────────────────────────────────
+
 export class IndicatorService {
   compute(
     declaration: IndicatorDeclaration,
@@ -65,16 +100,35 @@ export class IndicatorService {
     switch (declaration.type) {
       case 'SMA':
         return sma(closes, declaration.params.period);
+
       case 'EMA':
         return ema(closes, declaration.params.period);
+
       case 'RSI':
         return rsi(closes, declaration.params.period);
+
       case 'ATR':
         return atr(candles, declaration.params.period);
+
       case 'VWAP':
         return vwap(candles);
+
       case 'VOLUME_MA':
         return sma(candles.map((c) => c.volume), declaration.params.period);
+
+      case 'MACD': {
+        const fast = declaration.params.fast ?? 12;
+        const slow = declaration.params.slow ?? 26;
+        return macd(closes, fast, slow);
+      }
+
+      case 'BB': {
+        const period  = declaration.params.period  ?? 20;
+        const stdDev  = declaration.params.stdDev  ?? 2;
+        const band    = declaration.params.band    ?? 0; // 1=upper, 0=middle, -1=lower
+        return bollingerBand(closes, period, stdDev, band);
+      }
+
       default:
         throw new Error(`Unknown indicator type: ${(declaration as IndicatorDeclaration).type}`);
     }

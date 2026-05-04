@@ -1,0 +1,67 @@
+{
+  "id": "rsi-divergence-v1",
+  "name": "RSI Trend-Filter Strategy — BTC/USDT 4h",
+  "symbols": ["BTCUSDT"],
+  "indicators": [
+    { "id": "rsi14",  "type": "RSI", "params": { "period": 14 }, "timeframe": "4h" },
+    { "id": "ema50",  "type": "EMA", "params": { "period": 50 }, "timeframe": "4h" },
+    { "id": "ema200", "type": "EMA", "params": { "period": 200 }, "timeframe": "4h" },
+    { "id": "atr14",  "type": "ATR", "params": { "period": 14 }, "timeframe": "4h" }
+  ],
+  "rules": [
+    {
+      "id": "rsi-bull-entry",
+      "name": "RSI recovery in uptrend (EMA50 > EMA200)",
+      "priority": 1,
+      "conditionGroup": {
+        "logic": "AND",
+        "conditions": [
+          { "left": "rsi14",  "operator": ">",  "right": 50 },
+          { "left": "rsi14",  "operator": "<",  "right": 65 },
+          { "left": "ema50",  "operator": ">",  "right": "ema200" },
+          { "left": "price.close", "operator": ">", "right": "ema50" }
+        ]
+      },
+      "action": "BUY",
+      "params": { "sizeMode": "pct_balance", "sizeValue": 12, "leverage": 1 }
+    },
+    {
+      "id": "rsi-overbought-exit",
+      "name": "RSI overbought — exit long",
+      "priority": 2,
+      "conditionGroup": {
+        "logic": "AND",
+        "conditions": [
+          { "left": "rsi14", "operator": ">", "right": 75 }
+        ]
+      },
+      "action": "CLOSE",
+      "params": { "sizeMode": "pct_position", "sizeValue": 100 }
+    },
+    {
+      "id": "rsi-bear-short",
+      "name": "RSI below 40 in downtrend (EMA50 < EMA200)",
+      "priority": 3,
+      "conditionGroup": {
+        "logic": "AND",
+        "conditions": [
+          { "left": "rsi14",  "operator": "<",  "right": 40 },
+          { "left": "ema50",  "operator": "<",  "right": "ema200" },
+          { "left": "price.close", "operator": "<", "right": "ema50" }
+        ]
+      },
+      "action": "SELL",
+      "params": { "sizeMode": "pct_balance", "sizeValue": 12, "leverage": 1 }
+    }
+  ],
+  "loop": { "intervalSeconds": 14400 },
+  "riskManagement": {
+    "maxDrawdownPct": 20,
+    "maxPositionPct": 15,
+    "dailyLossLimitPct": 5,
+    "stopLossMode": "atr",
+    "stopLossAtrMultiplier": 2.5,
+    "trailingStopPct": 5,
+    "takeProfitPct": 15
+  }
+}

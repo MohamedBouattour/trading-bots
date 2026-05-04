@@ -1,0 +1,63 @@
+{
+  "id": "bb-mean-reversion-v1",
+  "name": "Bollinger Bands Mean Reversion — ETH/USDT 15m",
+  "symbols": ["ETHUSDT"],
+  "indicators": [
+    { "id": "bbUpper",  "type": "BB", "params": { "period": 20, "stdDev": 2, "band":  1 }, "timeframe": "15m" },
+    { "id": "bbMiddle", "type": "BB", "params": { "period": 20, "stdDev": 2, "band":  0 }, "timeframe": "15m" },
+    { "id": "bbLower",  "type": "BB", "params": { "period": 20, "stdDev": 2, "band": -1 }, "timeframe": "15m" },
+    { "id": "rsi14",    "type": "RSI", "params": { "period": 14 },                          "timeframe": "15m" }
+  ],
+  "rules": [
+    {
+      "id": "bb-oversold-entry",
+      "name": "Price below lower BB and RSI oversold",
+      "priority": 1,
+      "conditionGroup": {
+        "logic": "AND",
+        "conditions": [
+          { "left": "price.close", "operator": "<",  "right": "bbLower" },
+          { "left": "rsi14",       "operator": "<",  "right": 35 }
+        ]
+      },
+      "action": "BUY",
+      "params": { "sizeMode": "pct_balance", "sizeValue": 8, "leverage": 1 }
+    },
+    {
+      "id": "bb-midline-exit",
+      "name": "Price reverts to middle band — take profit",
+      "priority": 2,
+      "conditionGroup": {
+        "logic": "AND",
+        "conditions": [
+          { "left": "price.close", "operator": ">=", "right": "bbMiddle" }
+        ]
+      },
+      "action": "TAKE_PROFIT",
+      "params": { "sizeMode": "pct_position", "sizeValue": 100 }
+    },
+    {
+      "id": "bb-overbought-short",
+      "name": "Price above upper BB and RSI overbought",
+      "priority": 3,
+      "conditionGroup": {
+        "logic": "AND",
+        "conditions": [
+          { "left": "price.close", "operator": ">", "right": "bbUpper" },
+          { "left": "rsi14",       "operator": ">", "right": 70 }
+        ]
+      },
+      "action": "SELL",
+      "params": { "sizeMode": "pct_balance", "sizeValue": 8, "leverage": 1 }
+    }
+  ],
+  "loop": { "intervalSeconds": 900 },
+  "riskManagement": {
+    "maxDrawdownPct": 10,
+    "maxPositionPct": 10,
+    "dailyLossLimitPct": 3,
+    "stopLossMode": "fixed_pct",
+    "stopLossFixedPct": 4,
+    "takeProfitPct": 5
+  }
+}

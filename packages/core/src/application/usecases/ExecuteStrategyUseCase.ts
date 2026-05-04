@@ -6,7 +6,9 @@ import type { IStateStore } from '../ports/IStateStore.js';
 import type { ILogger } from '../ports/ILogger.js';
 import { IndicatorService } from '../../domain/services/IndicatorService.js';
 import { ConditionEvaluator } from '../../domain/services/ConditionEvaluator.js';
+import { RiskManager } from '../../domain/services/RiskManager.js';
 import type { Candle } from '../../domain/models/Candle.js';
+import type { TradeRecord } from '../../domain/models/TradeRecord.js';
 
 const ONE_DAY_MS = 86_400_000;
 
@@ -28,13 +30,14 @@ function makeInitialState(blueprint: StrategyBlueprint, balance: number): BotSta
 
 export class ExecuteStrategyUseCase {
   private indicators = new IndicatorService();
-  private evaluator = new ConditionEvaluator();
+  private evaluator  = new ConditionEvaluator();
+  private riskMgr    = new RiskManager();
 
   constructor(
-    private market: IMarketDataProvider,
+    private market:   IMarketDataProvider,
     private executor: ITradeExecutor,
-    private store: IStateStore,
-    private logger: ILogger
+    private store:    IStateStore,
+    private logger:   ILogger
   ) {}
 
   async run(blueprint: StrategyBlueprint): Promise<void> {
@@ -46,7 +49,7 @@ export class ExecuteStrategyUseCase {
       return;
     }
 
-    // Reset daily loss counter if new day
+    // Reset daily loss counter if a new trading day has started
     if (Date.now() - state.dailyLossResetAt > ONE_DAY_MS) {
       state.dailyLoss = 0;
       state.dailyLossResetAt = Date.now();
@@ -64,55 +67,109 @@ export class ExecuteStrategyUseCase {
       candlesByTimeframe.set(tf, candles);
     }
 
-    // Compute all indicators
+    // Compute all indicator values
     const indicatorValues = this.indicators.computeAll(blueprint.indicators, candlesByTimeframe);
     this.logger.debug('Indicators computed', { strategyId: blueprint.id, values: indicatorValues });
 
-    // Get latest candle for price reference
+    // Resolve latest candle for price references
     const primaryCandles = candlesByTimeframe.get(blueprint.indicators[0]?.timeframe ?? '1h') ?? [];
-    const latestCandle = primaryCandles[primaryCandles.length - 1];
+    const latestCandle   = primaryCandles[primaryCandles.length - 1];
     if (!latestCandle) {
       this.logger.warn('No candle data, skipping', { strategyId: blueprint.id });
       await this.store.save(state);
       return;
     }
 
-    // Evaluate rules by priority order
-    const sortedRules = [...blueprint.rules].sort((a, b) => a.priority - b.priority);
-
+    // ── Per-symbol loop ──────────────────────────────────────────────────────
     for (const symbol of blueprint.symbols) {
       const currentPrice = await this.market.getLatestPrice(symbol);
 
+      // ── Stop-loss & take-profit checks on open positions ──────────────────
+      const openTrades = state.openTrades.filter((t) => t.symbol === symbol && t.status === 'OPEN');
+      for (const trade of openTrades) {
+        const rm = blueprint.riskManagement;
+
+        // Compute ATR for ATR-based stop-loss (reuse the primary timeframe)
+        const atrDecl = blueprint.indicators.find((i) => i.type === 'ATR');
+        const atrValue = atrDecl ? indicatorValues[atrDecl.id] : undefined;
+
+        const slPrice = this.riskMgr.computeStopLossPrice(
+          trade.entryPrice, trade.direction, rm, atrValue
+        );
+
+        // Trailing stop: update high-water mark, then recompute stop
+        let effectiveSlPrice = slPrice;
+        if (rm.trailingStopPct !== undefined) {
+          const hwm = trade.direction === 'LONG'
+            ? Math.max(trade.entryPrice, currentPrice)
+            : Math.min(trade.entryPrice, currentPrice);
+          const trailingPrice = this.riskMgr.computeTrailingStopPrice(hwm, trade.direction, rm.trailingStopPct);
+          // Use the more protective of the two
+          if (trade.direction === 'LONG') {
+            effectiveSlPrice = slPrice !== undefined ? Math.max(slPrice, trailingPrice) : trailingPrice;
+          } else {
+            effectiveSlPrice = slPrice !== undefined ? Math.min(slPrice, trailingPrice) : trailingPrice;
+          }
+        }
+
+        const slTriggered = effectiveSlPrice !== undefined &&
+          this.riskMgr.isStopLossTriggered(trade, currentPrice, effectiveSlPrice);
+
+        const tpPct = rm.takeProfitPct ?? trade.triggeredRuleId ? undefined : undefined;
+        const tpTriggered = rm.takeProfitPct !== undefined &&
+          this.riskMgr.isTakeProfitTriggered(trade, currentPrice, rm.takeProfitPct);
+
+        if (slTriggered || tpTriggered) {
+          const reason = slTriggered ? 'stop-loss' : 'take-profit';
+          this.logger.info(`Closing trade via ${reason}`, { strategyId: blueprint.id, tradeId: trade.id, symbol });
+          const closed = await this.executor.closePosition(trade, currentPrice);
+          state.openTrades   = state.openTrades.filter((t) => t.id !== trade.id);
+          state.closedTrades.push(closed);
+          if ((closed.pnlUsd ?? 0) < 0) state.dailyLoss += Math.abs(closed.pnlUsd ?? 0);
+        }
+      }
+
+      // ── Portfolio-level risk gate ─────────────────────────────────────────
+      const riskCheck = this.riskMgr.checkPortfolioRisk(state, blueprint.riskManagement, balance);
+      if (riskCheck.breached) {
+        state.status     = 'halted';
+        state.haltReason = riskCheck.reason;
+        this.logger.warn('Bot halted due to risk breach', { strategyId: blueprint.id, reason: riskCheck.reason });
+        break;
+      }
+
+      // ── Rule evaluation (highest priority first) ──────────────────────────
+      const sortedRules = [...blueprint.rules].sort((a, b) => a.priority - b.priority);
       for (const rule of sortedRules) {
         const triggered = this.evaluator.evaluate(rule.conditionGroup, indicatorValues, latestCandle);
-
         if (!triggered) continue;
-
-        // Risk checks
-        if (this.isRiskBreached(state, blueprint, balance)) {
-          state.status = 'halted';
-          state.haltReason = 'Risk management limit reached';
-          this.logger.warn('Bot halted due to risk breach', { strategyId: blueprint.id });
-          break;
-        }
 
         this.logger.info('Rule triggered', { strategyId: blueprint.id, ruleId: rule.id, action: rule.action, symbol });
 
-        // Track rule hit
         const hit = state.ruleHits.find((h) => h.ruleId === rule.id);
         if (hit) hit.count += 1;
 
-        // Execute trade
-        const trade = await this.executor.execute(symbol, rule.action, rule.params, currentPrice, balance);
         if (rule.action === 'BUY' || rule.action === 'SELL') {
+          // Respect maxPositionPct
+          const maxSizeUsd = this.riskMgr.maxPositionSizeUsd(
+            balance, blueprint.riskManagement.maxPositionPct
+          );
+          const cappedParams = {
+            ...rule.params,
+            // If sizeMode is fixed_usd, cap to maxPositionSizeUsd
+            sizeValue: rule.params.sizeMode === 'fixed_usd'
+              ? Math.min(rule.params.sizeValue, maxSizeUsd)
+              : rule.params.sizeValue,
+          };
+          const trade = await this.executor.execute(symbol, rule.action, cappedParams, currentPrice, balance);
           state.openTrades.push(trade);
-        } else if (rule.action === 'CLOSE') {
+        } else if (rule.action === 'CLOSE' || rule.action === 'TAKE_PROFIT') {
           const open = state.openTrades.find((t) => t.symbol === symbol && t.status === 'OPEN');
           if (open) {
             const closed = await this.executor.closePosition(open, currentPrice);
-            state.openTrades = state.openTrades.filter((t) => t.id !== open.id);
+            state.openTrades    = state.openTrades.filter((t) => t.id !== open.id);
             state.closedTrades.push(closed);
-            state.dailyLoss += (closed.pnlUsd ?? 0) < 0 ? Math.abs(closed.pnlUsd ?? 0) : 0;
+            if ((closed.pnlUsd ?? 0) < 0) state.dailyLoss += Math.abs(closed.pnlUsd ?? 0);
           }
         }
 
@@ -122,20 +179,12 @@ export class ExecuteStrategyUseCase {
       if (state.status === 'halted') break;
     }
 
-    // Record equity snapshot
+    // ── Equity snapshot ───────────────────────────────────────────────────────
     state.equityHistory.push({ timestamp: Date.now(), equity: balance });
     if (state.equityHistory.length > 1000) state.equityHistory = state.equityHistory.slice(-1000);
 
     if (state.status === 'running') state.status = 'idle';
     await this.store.save(state);
     this.logger.info('Strategy cycle complete', { strategyId: blueprint.id });
-  }
-
-  private isRiskBreached(state: BotState, blueprint: StrategyBlueprint, balance: number): boolean {
-    const rm = blueprint.riskManagement;
-    const drawdownPct = ((state.initialBalance - balance) / state.initialBalance) * 100;
-    if (drawdownPct >= rm.maxDrawdownPct) return true;
-    if ((state.dailyLoss / state.initialBalance) * 100 >= rm.dailyLossLimitPct) return true;
-    return false;
   }
 }

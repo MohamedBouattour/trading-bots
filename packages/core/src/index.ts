@@ -7,6 +7,7 @@ export * from './domain/models/BotState.js';
 // Domain Services
 export * from './domain/services/IndicatorService.js';
 export * from './domain/services/ConditionEvaluator.js';
+export * from './domain/services/RiskManager.js';
 
 // Application Ports
 export * from './application/ports/IMarketDataProvider.js';
