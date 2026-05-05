@@ -1,0 +1,80 @@
+{
+  "id": "binance-stock-perp-core-sprint-v1",
+  "name": "Binance Stock Perps Core+Sprint (Daily)",
+  "version": "1.0.0",
+  "description": "Daily swing/position strategy on Binance USDT-M stock perps, designed to be the 30% sprint bucket on top of a 70% core rebalancing portfolio.",
+  "symbols": [
+    "AAPLUSDT",
+    "MSFTUSDT",
+    "GOOGLUSDT",
+    "TSMUSDT",
+    "NVDAUSDT",
+    "MUUSDT",
+    "TSLAUSDT",
+    "METAUSDT",
+    "AMDUSDT"
+  ],
+  "defaultTimeframe": "1d",
+  "indicators": [
+    { "id": "ema20",  "type": "EMA",       "params": { "period": 20 }, "timeframe": "1d" },
+    { "id": "ema50",  "type": "EMA",       "params": { "period": 50 }, "timeframe": "1d" },
+    { "id": "rsi14",  "type": "RSI",       "params": { "period": 14 }, "timeframe": "1d" },
+    { "id": "atr14",  "type": "ATR",       "params": { "period": 14 }, "timeframe": "1d" },
+    { "id": "vma20",  "type": "VOLUME_MA", "params": { "period": 20 }, "timeframe": "1d" }
+  ],
+  "rules": [
+    {
+      "id": "sprint-buy-uptrend",
+      "name": "Daily uptrend + healthy momentum",
+      "priority": 1,
+      "conditionGroup": {
+        "logic": "AND",
+        "conditions": [
+          { "left": "ema20",        "operator": ">",  "right": "ema50" },
+          { "left": "rsi14",        "operator": ">",  "right": 40 },
+          { "left": "rsi14",        "operator": "<",  "right": 65 },
+          { "left": "price.volume", "operator": ">",  "right": "vma20" }
+        ]
+      },
+      "action": "BUY",
+      "params": { "sizeMode": "pct_balance", "sizeValue": 10, "leverage": 1.5 }
+    },
+    {
+      "id": "sprint-exit-trend-break",
+      "name": "Trend breakdown (EMA20 below EMA50)",
+      "priority": 2,
+      "conditionGroup": {
+        "logic": "AND",
+        "conditions": [
+          { "left": "ema20", "operator": "<", "right": "ema50" }
+        ]
+      },
+      "action": "SELL",
+      "params": { "sizeMode": "pct_position", "sizeValue": 100 }
+    },
+    {
+      "id": "hold",
+      "name": "No signal",
+      "priority": 99,
+      "conditionGroup": { "logic": "AND", "conditions": [] },
+      "action": "HOLD",
+      "params": { "sizeMode": "pct_balance", "sizeValue": 0 }
+    }
+  ],
+  "loop": { "intervalSeconds": 86400 },
+  "riskManagement": {
+    "maxDrawdownPct": 20,
+    "maxPositionPct": 30,
+    "dailyLossLimitPct": 5,
+    "stopLossMode": "atr",
+    "stopLossAtrMultiplier": 1.5,
+    "trailingStopPct": 3,
+    "takeProfitPct": 12
+  },
+  "metadata": {
+    "author": "MohamedBouattour",
+    "createdAt": "2026-05-05",
+    "tags": ["stocks", "perps", "swing", "position", "core-sprint"],
+    "notes": "Intended to be used alongside docs/binance-stock-perp-strategy.md where this JSON is the sprint engine for the 30% active bucket. Core 70% is handled by the stock-portfolio-manager rebalancing module."
+  }
+}
