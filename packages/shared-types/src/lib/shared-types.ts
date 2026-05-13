@@ -1,7 +1,7 @@
 export interface User {
   id: string;
   email: string;
-  name?: string;
+  name: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -24,10 +24,10 @@ export interface StrategyConfig {
 export interface Strategy {
   id: string;
   name: string;
-  description?: string;
+  description: string | null;
   type: StrategyType;
   config: StrategyConfig;
-  userId?: string;
+  userId: string | null;
   isPublic: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -54,13 +54,13 @@ export interface Trade {
   side: 'buy' | 'sell';
   symbol: string;
   entryPrice: number;
-  exitPrice?: number;
+  exitPrice: number | null;
   quantity: number;
-  pnl?: number;
-  pnlPercent?: number;
+  pnl: number | null;
+  pnlPercent: number | null;
   status: 'open' | 'closed';
   openedAt: Date;
-  closedAt?: Date;
+  closedAt: Date | null;
 }
 
 export interface BotLog {
@@ -68,7 +68,7 @@ export interface BotLog {
   botId: string;
   level: 'info' | 'warn' | 'error';
   message: string;
-  metadata?: Record<string, unknown>;
+  metadata: Record<string, unknown> | null;
   createdAt: Date;
 }
 
@@ -91,23 +91,23 @@ export interface BacktestRun {
   startDate: Date;
   endDate: Date;
   initialBalance: number;
-  finalBalance?: number;
-  totalReturn?: number;
-  sharpeRatio?: number;
-  maxDrawdown?: number;
-  totalTrades?: number;
-  winRate?: number;
-  status: 'running' | 'completed' | 'failed';
-  trades?: Trade[];
+  finalBalance: number | null;
+  totalReturn: number | null;
+  sharpeRatio: number | null;
+  maxDrawdown: number | null;
+  totalTrades: number | null;
+  winRate: number | null;
+  status: string;
+  trades: unknown;
   createdAt: Date;
 }
 
 export interface MarketplaceStrategy {
   id: string;
   name: string;
-  description?: string;
+  description: string | null;
   strategyId: string;
-  author?: string;
+  author: string | null;
   monthlyROI: number;
   totalROI: number;
   popularity: number;
@@ -116,6 +116,7 @@ export interface MarketplaceStrategy {
   rating: number;
   isPublished: boolean;
   createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface BotDecision {

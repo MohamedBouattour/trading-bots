@@ -1,0 +1,140 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: trading-bots-db
+    environment:
+      POSTGRES_USER: trading
+      POSTGRES_PASSWORD: trading_pass
+      POSTGRES_DB: trading_bots
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - trading-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trading -d trading_bots"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.service
+      args:
+        SERVICE: api-gateway
+        PORT: 3000
+    container_name: trading-bots-api
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      DATABASE_URL: postgresql://trading:trading_pass@postgres:5432/trading_bots
+      NODE_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - trading-network
+
+  bot-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.service
+      args:
+        SERVICE: bot-worker
+        PORT: 3001
+    container_name: trading-bots-worker
+    environment:
+      PORT: 3001
+      DATABASE_URL: postgresql://trading:trading_pass@postgres:5432/trading_bots
+      API_KEY: ${API_KEY}
+      SECRET_KEY: ${SECRET_KEY}
+      NODE_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - trading-network
+
+  backtester:
+    build:
+      context: .
+      dockerfile: Dockerfile.service
+      args:
+        SERVICE: backtester
+        PORT: 3002
+    container_name: trading-bots-backtester
+    ports:
+      - "3002:3002"
+    environment:
+      PORT: 3002
+      DATABASE_URL: postgresql://trading:trading_pass@postgres:5432/trading_bots
+      NODE_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - trading-network
+
+  analytics:
+    build:
+      context: .
+      dockerfile: Dockerfile.service
+      args:
+        SERVICE: analytics
+        PORT: 3003
+    container_name: trading-bots-analytics
+    ports:
+      - "3003:3003"
+    environment:
+      PORT: 3003
+      DATABASE_URL: postgresql://trading:trading_pass@postgres:5432/trading_bots
+      NODE_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - trading-network
+
+  marketplace:
+    build:
+      context: .
+      dockerfile: Dockerfile.service
+      args:
+        SERVICE: marketplace
+        PORT: 3004
+    container_name: trading-bots-marketplace
+    ports:
+      - "3004:3004"
+    environment:
+      PORT: 3004
+      DATABASE_URL: postgresql://trading:trading_pass@postgres:5432/trading_bots
+      NODE_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - trading-network
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: trading-bots-frontend
+    ports:
+      - "4200:80"
+    depends_on:
+      - api-gateway
+    networks:
+      - trading-network
+
+volumes:
+  postgres_data:
+
+networks:
+  trading-network:
+    driver: bridge

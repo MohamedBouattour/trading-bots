@@ -1,0 +1,63 @@
+<div class="bot-detail-page">
+  <button class="btn btn-back" (click)="goBack()">&larr; Back to Bots</button>
+
+  <div class="error-banner" *ngIf="error">
+    {{ error }}
+  </div>
+
+  <div *ngIf="bot" class="bot-info-card">
+    <h2>{{ bot.name }}</h2>
+    <div class="info-grid">
+      <div><strong>Asset:</strong> {{ bot.asset }}</div>
+      <div><strong>Timeframe:</strong> {{ bot.timeframe }}</div>
+      <div><strong>Balance:</strong> {{ bot.balance }}</div>
+      <div>
+        <strong>Status:</strong>
+        <span class="status-badge" [class.active]="bot.active">
+          {{ bot.active ? 'Active' : 'Stopped' }}
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <section class="section">
+    <h3>Trades</h3>
+    <div class="table-container" *ngIf="trades.length; else noTrades">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Side</th>
+            <th>Price</th>
+            <th>Quantity</th>
+            <th>PnL</th>
+            <th>Timestamp</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let t of trades; trackBy: trackById">
+            <td>{{ t.id }}</td>
+            <td><span class="side-badge" [class.buy]="t.side === 'buy'" [class.sell]="t.side === 'sell'">{{ t.side }}</span></td>
+            <td>{{ t.price }}</td>
+            <td>{{ t.quantity }}</td>
+            <td>{{ t.pnl }}</td>
+            <td>{{ t.timestamp | date:'short' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <ng-template #noTrades><p class="empty-state">No trades yet</p></ng-template>
+  </section>
+
+  <section class="section">
+    <h3>Logs</h3>
+    <div class="logs-container" *ngIf="logs.length; else noLogs">
+      <div class="log-item" *ngFor="let log of logs; trackBy: trackById">
+        <span class="log-time">{{ log.timestamp | date:'medium' }}</span>
+        <span class="log-level" [class.error]="log.level === 'error'" [class.warn]="log.level === 'warn'">{{ log.level }}</span>
+        <span class="log-msg">{{ log.message }}</span>
+      </div>
+    </div>
+    <ng-template #noLogs><p class="empty-state">No logs available</p></ng-template>
+  </section>
+</div>

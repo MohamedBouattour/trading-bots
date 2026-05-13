@@ -1,0 +1,103 @@
+<div class="backtesting-page">
+  <h1>Backtesting</h1>
+
+  <div class="error-banner" *ngIf="error">
+    {{ error }}
+  </div>
+
+  <section class="form-section">
+    <h2>Run Backtest</h2>
+    <div class="backtest-form">
+      <div class="form-group">
+        <label>Asset</label>
+        <input [(ngModel)]="form.asset" placeholder="e.g. BTCUSDT" />
+      </div>
+      <div class="form-group">
+        <label>Timeframe</label>
+        <input [(ngModel)]="form.timeframe" placeholder="e.g. 1h" />
+      </div>
+      <div class="form-group">
+        <label>Start Date</label>
+        <input [(ngModel)]="form.startDate" type="date" />
+      </div>
+      <div class="form-group">
+        <label>End Date</label>
+        <input [(ngModel)]="form.endDate" type="date" />
+      </div>
+      <div class="form-group">
+        <label>Initial Balance</label>
+        <input [(ngModel)]="form.initialBalance" type="number" />
+      </div>
+      <div class="form-group">
+        <label>Strategy</label>
+        <input [(ngModel)]="form.strategy" placeholder="Strategy name" />
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" (click)="runBacktest()" [disabled]="running">
+          {{ running ? 'Running...' : 'Run Backtest' }}
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <section class="results-section" *ngIf="result">
+    <h2>Results</h2>
+    <div class="results-grid">
+      <div class="result-card">
+        <span class="result-label">Total Return</span>
+        <span class="result-value" [class.positive]="result.totalReturn >= 0" [class.negative]="result.totalReturn < 0">
+          {{ result.totalReturn }}%
+        </span>
+      </div>
+      <div class="result-card">
+        <span class="result-label">Sharpe Ratio</span>
+        <span class="result-value">{{ result.sharpeRatio }}</span>
+      </div>
+      <div class="result-card">
+        <span class="result-label">Max Drawdown</span>
+        <span class="result-value negative">{{ result.maxDrawdown }}%</span>
+      </div>
+      <div class="result-card">
+        <span class="result-label">Win Rate</span>
+        <span class="result-value">{{ result.winRate }}%</span>
+      </div>
+      <div class="result-card">
+        <span class="result-label">Total Trades</span>
+        <span class="result-value">{{ result.totalTrades }}</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="history-section">
+    <h2>Previous Runs</h2>
+    <div class="table-container" *ngIf="previousRuns.length; else noRuns">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Asset</th>
+            <th>Strategy</th>
+            <th>Return</th>
+            <th>Sharpe</th>
+            <th>Drawdown</th>
+            <th>Win Rate</th>
+            <th>Trades</th>
+            <th>Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let run of previousRuns">
+            <td>{{ run.asset }}</td>
+            <td>{{ run.strategy }}</td>
+            <td [class.positive]="run.totalReturn >= 0" [class.negative]="run.totalReturn < 0">{{ run.totalReturn }}%</td>
+            <td>{{ run.sharpeRatio }}</td>
+            <td class="negative">{{ run.maxDrawdown }}%</td>
+            <td>{{ run.winRate }}%</td>
+            <td>{{ run.totalTrades }}</td>
+            <td>{{ run.createdAt | date:'short' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <ng-template #noRuns><p class="empty-state">No previous backtest runs</p></ng-template>
+  </section>
+</div>

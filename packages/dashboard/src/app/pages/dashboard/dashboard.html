@@ -1,0 +1,35 @@
+<div class="dashboard">
+  <header class="dashboard-header">
+    <h1>Dashboard</h1>
+    <span class="health-badge" [class.online]="health.status === 'ok'">
+      {{ health.status === 'ok' ? 'API Online' : 'API Offline' }}
+    </span>
+  </header>
+
+  <div class="error-banner" *ngIf="error">
+    {{ error }}
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card" *ngFor="let stat of stats">
+      <span class="stat-icon">{{ stat.icon }}</span>
+      <div class="stat-info">
+        <span class="stat-value">{{ stat.value }}</span>
+        <span class="stat-label">{{ stat.label }}</span>
+      </div>
+    </div>
+  </div>
+
+  <section class="recent-activity">
+    <h2>Recent Activity</h2>
+    <div class="activity-list" *ngIf="recentActivity.length; else noActivity">
+      <div class="activity-item" *ngFor="let item of recentActivity">
+        <span class="activity-time">{{ item.timestamp | date:'short' }}</span>
+        <span class="activity-text">{{ item.message }}</span>
+      </div>
+    </div>
+    <ng-template #noActivity>
+      <p class="empty-state">No recent activity</p>
+    </ng-template>
+  </section>
+</div>

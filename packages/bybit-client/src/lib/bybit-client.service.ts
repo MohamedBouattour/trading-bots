@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Candle, MarketStats, BotDecision } from '@trading-bots/shared-types';
+import { Candle, MarketStats } from '@trading-bots/shared-types';
 
 @Injectable()
 export class BybitClientService {

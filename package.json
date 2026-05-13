@@ -6,7 +6,19 @@
     "nx": "nx",
     "docker:build": "docker compose build",
     "docker:up": "docker compose up -d",
-    "docker:down": "docker compose down"
+    "docker:down": "docker compose down",
+    "prisma:generate": "prisma generate --schema=packages/database/prisma/schema.prisma",
+    "prisma:migrate": "prisma migrate dev --schema=packages/database/prisma/schema.prisma",
+    "prisma:push": "prisma db push --schema=packages/database/prisma/schema.prisma",
+    "prisma:studio": "prisma studio --schema=packages/database/prisma/schema.prisma",
+    "start:api": "nx serve api-gateway",
+    "start:worker": "nx serve bot-worker",
+    "start:backtester": "nx serve backtester",
+    "start:analytics": "nx serve analytics",
+    "start:marketplace": "nx serve marketplace",
+    "start:dashboard": "nx serve dashboard",
+    "start:all": "nx run-many --target=serve --all",
+    "build:all": "nx run-many --target=build --all"
   },
   "private": true,
   "devDependencies": {
@@ -47,6 +59,7 @@
     "jest-util": "^29.7.0",
     "nx": "22.7.1",
     "prettier": "~3.6.2",
+    "prisma": "^6.0.0",
     "ts-jest": "^29.0.0",
     "ts-node": "^10.0.0",
     "tslib": "^2.3.0",

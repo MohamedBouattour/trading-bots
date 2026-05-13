@@ -1,0 +1,92 @@
+<div class="analytics-page">
+  <h1>Analytics</h1>
+
+  <div class="error-banner" *ngIf="error">
+    {{ error }}
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card" *ngFor="let stat of stats">
+      <span class="stat-value">{{ stat.value }}</span>
+      <span class="stat-label">{{ stat.label }}</span>
+    </div>
+  </div>
+
+  <section class="section">
+    <h2>Trade History</h2>
+    <div class="filters">
+      <input [(ngModel)]="tradeFilter.botId" placeholder="Bot ID" />
+      <input [(ngModel)]="tradeFilter.symbol" placeholder="Symbol" />
+      <input [(ngModel)]="tradeFilter.status" placeholder="Status" />
+      <button class="btn btn-sm btn-primary" (click)="loadTradeHistory()">Filter</button>
+    </div>
+    <div class="table-container" *ngIf="tradeHistory.length; else noTrades">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Bot</th>
+            <th>Symbol</th>
+            <th>Side</th>
+            <th>Price</th>
+            <th>Qty</th>
+            <th>PnL</th>
+            <th>Status</th>
+            <th>Time</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let t of tradeHistory; trackBy: trackById">
+            <td>{{ t.id }}</td>
+            <td>{{ t.botId }}</td>
+            <td>{{ t.symbol }}</td>
+            <td><span class="side-badge" [class.buy]="t.side === 'buy'" [class.sell]="t.side === 'sell'">{{ t.side }}</span></td>
+            <td>{{ t.price }}</td>
+            <td>{{ t.quantity }}</td>
+            <td [class.positive]="t.pnl >= 0" [class.negative]="t.pnl < 0">{{ t.pnl }}</td>
+            <td>{{ t.status }}</td>
+            <td>{{ t.timestamp | date:'short' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <ng-template #noTrades><p class="empty-state">No trades found</p></ng-template>
+  </section>
+
+  <section class="section">
+    <h2>Daily PnL</h2>
+    <div class="table-container" *ngIf="pnlDaily.length; else noPnl">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>PnL</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let d of pnlDaily; trackBy: trackById">
+            <td>{{ d.date | date:'shortDate' }}</td>
+            <td [class.positive]="d.pnl >= 0" [class.negative]="d.pnl < 0">{{ d.pnl }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <ng-template #noPnl><p class="empty-state">No daily PnL data</p></ng-template>
+  </section>
+
+  <section class="section">
+    <h2>Market Data</h2>
+    <div class="market-input">
+      <input [(ngModel)]="marketSymbol" placeholder="Symbol e.g. BTCUSDT" />
+      <button class="btn btn-sm btn-primary" (click)="loadMarketData()">Fetch</button>
+    </div>
+    <div *ngIf="marketData" class="market-display">
+      <div class="market-item"><strong>Symbol:</strong> {{ marketData.symbol }}</div>
+      <div class="market-item"><strong>Price:</strong> {{ marketData.price }}</div>
+      <div class="market-item"><strong>24h Change:</strong> {{ marketData.change24h }}%</div>
+      <div class="market-item"><strong>High:</strong> {{ marketData.high24h }}</div>
+      <div class="market-item"><strong>Low:</strong> {{ marketData.low24h }}</div>
+      <div class="market-item"><strong>Volume:</strong> {{ marketData.volume }}</div>
+    </div>
+  </section>
+</div>

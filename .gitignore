@@ -8,3 +8,20 @@ states/
 test-output
 
 .angular
+.nx
+tsconfig.tsbuildinfo
+*.tsbuildinfo
+packages/**/dist/
+packages/**/tsconfig.tsbuildinfo
+
+# Prisma
+node_modules/.prisma/
+packages/database/node_modules/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+.nx/

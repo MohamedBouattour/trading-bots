@@ -23,6 +23,12 @@
     },
     {
       "path": "./packages/database"
+    },
+    {
+      "path": "./packages/bybit-client"
+    },
+    {
+      "path": "./packages/dashboard"
     }
   ]
 }

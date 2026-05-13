@@ -1,0 +1,65 @@
+<div class="bot-list-page">
+  <header class="page-header">
+    <h1>Trading Bots</h1>
+    <button class="btn btn-primary" (click)="showCreateForm = !showCreateForm">
+      {{ showCreateForm ? 'Cancel' : '+ Create Bot' }}
+    </button>
+  </header>
+
+  <div class="error-banner" *ngIf="error">
+    {{ error }}
+  </div>
+
+  <div class="create-form" *ngIf="showCreateForm">
+    <h3>Create New Bot</h3>
+    <div class="form-row">
+      <input [(ngModel)]="newBot.name" placeholder="Bot name" />
+      <input [(ngModel)]="newBot.asset" placeholder="Asset (e.g. BTCUSDT)" />
+      <input [(ngModel)]="newBot.timeframe" placeholder="Timeframe (e.g. 1h)" />
+      <input [(ngModel)]="newBot.initialBalance" type="number" placeholder="Initial balance" />
+      <button class="btn btn-success" (click)="createBot()">Create</button>
+    </div>
+  </div>
+
+  <div class="table-container" *ngIf="bots.length; else emptyState">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Asset</th>
+          <th>Timeframe</th>
+          <th>Balance</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let bot of bots; trackBy: trackById" (click)="viewDetail(bot.id)" class="clickable-row">
+          <td>{{ bot.name }}</td>
+          <td>{{ bot.asset }}</td>
+          <td>{{ bot.timeframe }}</td>
+          <td>{{ bot.balance }}</td>
+          <td>
+            <span class="status-badge" [class.active]="bot.active">
+              {{ bot.active ? 'Active' : 'Stopped' }}
+            </span>
+          </td>
+          <td>
+            <button
+              class="btn btn-sm"
+              [class.btn-danger]="bot.active"
+              [class.btn-success]="!bot.active"
+              (click)="$event.stopPropagation(); toggleBot(bot)"
+            >
+              {{ bot.active ? 'Stop' : 'Start' }}
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <ng-template #emptyState>
+    <p class="empty-state">No bots yet. Create one to get started.</p>
+  </ng-template>
+</div>

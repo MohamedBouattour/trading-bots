@@ -17,5 +17,13 @@
     "jest.config.cts",
     "src/**/*.spec.ts",
     "src/**/*.test.ts"
+  ],
+  "references": [
+    {
+      "path": "../shared-types/tsconfig.lib.json"
+    },
+    {
+      "path": "../database/tsconfig.lib.json"
+    }
   ]
 }
