@@ -1,0 +1,145 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  apiKeys   ApiKey[]
+  bots      TradingBot[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ApiKey {
+  id         String   @id @default(cuid())
+  exchange   String   @default("bybit")
+  apiKey     String
+  secretKey  String
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Strategy {
+  id           String            @id @default(cuid())
+  name         String
+  description  String?
+  type         String
+  config       Json
+  userId       String?
+  user         User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  isPublic     Boolean           @default(false)
+  tradingBot   TradingBot?
+  backtestRuns BacktestRun[]
+  marketplace  MarketplaceStrategy?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+}
+
+model TradingBot {
+  id         String   @id @default(cuid())
+  name       String
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  strategyId String   @unique
+  strategy   Strategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  asset      String
+  timeframe  String
+  balance    Float    @default(0)
+  leverage   Int      @default(1)
+  useFutures Boolean  @default(false)
+  isActive   Boolean  @default(false)
+  trades     Trade[]
+  logs       BotLog[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Trade {
+  id         String    @id @default(cuid())
+  botId      String
+  bot        TradingBot @relation(fields: [botId], references: [id], onDelete: Cascade)
+  side       String
+  symbol     String
+  entryPrice Float
+  exitPrice  Float?
+  quantity   Float
+  pnl        Float?
+  pnlPercent Float?
+  status     String    @default("open")
+  openedAt   DateTime  @default(now())
+  closedAt   DateTime?
+}
+
+model BotLog {
+  id        String   @id @default(cuid())
+  botId     String
+  bot       TradingBot @relation(fields: [botId], references: [id], onDelete: Cascade)
+  level     String
+  message   String
+  metadata  Json?
+  createdAt DateTime @default(now())
+}
+
+model Candle {
+  id        String   @id @default(cuid())
+  symbol    String
+  timeframe String
+  open      Float
+  high      Float
+  low       Float
+  close     Float
+  volume    Float
+  timestamp DateTime
+
+  @@index([symbol, timeframe, timestamp])
+  @@unique([symbol, timeframe, timestamp])
+}
+
+model BacktestRun {
+  id             String   @id @default(cuid())
+  strategyId     String
+  strategy       Strategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  asset          String
+  timeframe      String
+  startDate      DateTime
+  endDate        DateTime
+  initialBalance Float
+  finalBalance   Float?
+  totalReturn    Float?
+  sharpeRatio    Float?
+  maxDrawdown    Float?
+  totalTrades    Int?
+  winRate        Float?
+  status         String   @default("running")
+  trades         Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model MarketplaceStrategy {
+  id             String   @id @default(cuid())
+  name           String
+  description    String?
+  strategyId     String   @unique
+  strategy       Strategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  author         String?
+  monthlyROI     Float    @default(0)
+  totalROI       Float    @default(0)
+  popularity     Int      @default(0)
+  fastestGrowing Boolean  @default(false)
+  downloads      Int      @default(0)
+  rating         Float    @default(0)
+  isPublished    Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}

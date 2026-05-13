@@ -4,3 +4,7 @@ dist/
 states/
 *.log
 *.js.map
+
+test-output
+
+.angular

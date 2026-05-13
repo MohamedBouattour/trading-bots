@@ -1,12 +1,28 @@
 {
-  "compilerOptions": {
-    "target": "es2020",
-    "module": "commonjs",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "outDir": "./dist"
-  },
-  "include": ["src/**/*"]
+  "extends": "./tsconfig.base.json",
+  "compileOnSave": false,
+  "files": [],
+  "references": [
+    {
+      "path": "./packages/api-gateway"
+    },
+    {
+      "path": "./packages/bot-worker"
+    },
+    {
+      "path": "./packages/backtester"
+    },
+    {
+      "path": "./packages/analytics"
+    },
+    {
+      "path": "./packages/marketplace"
+    },
+    {
+      "path": "./packages/shared-types"
+    },
+    {
+      "path": "./packages/database"
+    }
+  ]
 }

@@ -1,0 +1,25 @@
+{
+  "name": "@trading-bots/bybit-client",
+  "version": "0.0.1",
+  "private": true,
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@trading-bots/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "nx": {
+    "name": "bybit-client"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.0.0",
+    "@trading-bots/shared-types": "*",
+    "tslib": "^2.3.0"
+  }
+}
