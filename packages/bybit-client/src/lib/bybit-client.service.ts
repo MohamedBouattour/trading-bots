@@ -1,19 +1,35 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Candle, MarketStats } from '@trading-bots/shared-types';
 
+export const DEFAULT_STOCK_SYMBOLS = [
+  'AAPL', 'TSLA', 'NVDA', 'MSFT', 'GOOGL', 'AMZN', 'META', 'AMD',
+  'INTC', 'NFLX', 'DIS', 'BA', 'JPM', 'V', 'JNJ', 'WMT', 'PG', 'KO',
+  'PEP', 'XOM', 'CVX', 'CSCO', 'ADBE', 'CRM', 'ORCL', 'IBM', 'QCOM',
+  'TXN', 'AVGO', 'PYPL', 'SNAP', 'UBER', 'SQ', 'SHOP', 'RIVN', 'LCID',
+  'COIN', 'MARA', 'PLTR', 'SOFI',
+];
+
+export type BybitCategory = 'spot' | 'stock' | 'linear' | 'inverse';
+
 @Injectable()
 export class BybitClientService {
   private readonly logger = new Logger(BybitClientService.name);
   private apiKey: string = '';
   private secretKey: string = '';
   private baseUrl: string = 'https://api.bybit.com';
+  private category: BybitCategory = 'stock';
 
-  configure(apiKey: string, secretKey: string, testnet: boolean = false) {
+  configure(apiKey: string, secretKey: string, testnet: boolean = false, category?: BybitCategory) {
     this.apiKey = apiKey;
     this.secretKey = secretKey;
     if (testnet) {
       this.baseUrl = 'https://api-testnet.bybit.com';
     }
+    if (category) this.category = category;
+  }
+
+  setCategory(category: BybitCategory) {
+    this.category = category;
   }
 
   private async request(endpoint: string, options: RequestInit = {}): Promise<any> {
@@ -44,8 +60,7 @@ export class BybitClientService {
   }
 
   async getKline(symbol: string, interval: string, limit: number = 200): Promise<Candle[]> {
-    const category = 'spot';
-    const response = await this.request(`/v5/market/kline?category=${category}&symbol=${symbol}&interval=${interval}&limit=${limit}`);
+    const response = await this.request(`/v5/market/kline?category=${this.category}&symbol=${symbol}&interval=${interval}&limit=${limit}`);
     if (response.retCode !== 0) {
       this.logger.error(`Failed to fetch kline: ${response.retMsg}`);
       return [];
@@ -63,8 +78,7 @@ export class BybitClientService {
   }
 
   async getTickers(symbol: string): Promise<MarketStats | null> {
-    const category = 'spot';
-    const response = await this.request(`/v5/market/tickers?category=${category}&symbol=${symbol}`);
+    const response = await this.request(`/v5/market/tickers?category=${this.category}&symbol=${symbol}`);
     if (response.retCode !== 0 || !response.result?.list?.[0]) return null;
     const t = response.result.list[0];
     return {
@@ -78,9 +92,8 @@ export class BybitClientService {
   }
 
   async placeOrder(symbol: string, side: 'Buy' | 'Sell', orderType: 'Market' | 'Limit', qty: string, price?: string) {
-    const category = 'spot';
     const body: Record<string, any> = {
-      category,
+      category: this.category,
       symbol,
       side,
       orderType,
@@ -104,9 +117,67 @@ export class BybitClientService {
   }
 
   async getOpenPositions(symbol: string): Promise<any> {
-    const category = 'linear';
-    const response = await this.request(`/v5/position/list?category=${category}&symbol=${symbol}`);
+    const response = await this.request(`/v5/position/list?category=${this.category}&symbol=${symbol}`);
     return response;
+  }
+
+  async getSymbols(): Promise<string[]> {
+    try {
+      const response = await this.request(`/v5/market/instruments-info?category=${this.category}&limit=1000`);
+      if (response.retCode === 0 && response.result?.list) {
+        const symbols = (response.result.list as any[])
+          .filter((i: any) => i.status === 'Trading')
+          .map((i: any) => i.symbol);
+        if (symbols.length > 0) return symbols;
+      }
+    } catch {
+      this.logger.warn('Failed to fetch symbols from Bybit, using defaults');
+    }
+    return DEFAULT_STOCK_SYMBOLS;
+  }
+
+  getTimeframes(): string[] {
+    return ['1', '3', '5', '15', '30', '60', '120', '240', '360', '720', 'D', 'W', 'M'];
+  }
+
+  getTimeframeLabel(tf: string): string {
+    const labels: Record<string, string> = {
+      '1': '1m', '3': '3m', '5': '5m', '15': '15m', '30': '30m',
+      '60': '1h', '120': '2h', '240': '4h', '360': '6h', '720': '12h',
+      'D': '1d', 'W': '1w', 'M': '1M',
+    };
+    return labels[tf] || tf;
+  }
+
+  async getKlineRange(symbol: string, interval: string, start: number, end: number): Promise<Candle[]> {
+    const limit = 1000;
+    const allCandles: Candle[] = [];
+    let currentStart = start;
+
+    while (currentStart < end) {
+      const response = await this.request(
+        `/v5/market/kline?category=${this.category}&symbol=${symbol}&interval=${interval}&limit=${limit}&start=${currentStart}`
+      );
+      if (response.retCode !== 0 || !response.result?.list) break;
+
+      const batch = (response.result.list as string[][]).map((item: string[]) => ({
+        timestamp: new Date(parseInt(item[0]) * 1000),
+        open: parseFloat(item[1]),
+        high: parseFloat(item[2]),
+        low: parseFloat(item[3]),
+        close: parseFloat(item[4]),
+        volume: parseFloat(item[5]),
+        symbol,
+        timeframe: interval,
+      })).reverse();
+
+      if (batch.length === 0) break;
+      allCandles.push(...batch);
+      const lastTs = parseInt(response.result.list[response.result.list.length - 1][0]) * 1000;
+      currentStart = lastTs;
+    }
+
+    return allCandles;
   }
 
   calculateRSI(candles: Candle[], period: number = 14): number {

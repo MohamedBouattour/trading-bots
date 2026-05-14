@@ -33,7 +33,7 @@ export class MarketplaceComponent implements OnInit {
   }
 
   private loadStrategies() {
-    this.api.getMarketplaceStrategies({ sort: this.sortField }).subscribe({
+    this.api.getMarketplaceStrategies(this.sortField).subscribe({
       next: (res: any) => {
         this.allStrategies = res.all ?? [];
         this.bestRoi = res.bestRoi ?? [];

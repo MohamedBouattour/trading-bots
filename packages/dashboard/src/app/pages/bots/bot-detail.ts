@@ -38,14 +38,14 @@ export class BotDetailComponent implements OnInit {
   }
 
   private loadTrades(id: string) {
-    this.api.getBotTrades(id).subscribe({
+    this.api.getTrades(id).subscribe({
       next: (res: any) => (this.trades = res),
       error: () => (this.error = 'Failed to load trades'),
     });
   }
 
   private loadLogs(id: string) {
-    this.api.getBotLogs(id).subscribe({
+    this.api.getLogs(id).subscribe({
       next: (res: any) => (this.logs = res),
       error: () => (this.error = 'Failed to load logs'),
     });

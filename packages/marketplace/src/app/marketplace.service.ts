@@ -1,9 +1,14 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, OnModuleInit } from '@nestjs/common';
 import { DatabaseService } from '@trading-bots/database';
+import { seedStrategies } from './seed';
 
 @Injectable()
-export class MarketplaceService {
+export class MarketplaceService implements OnModuleInit {
   constructor(private readonly db: DatabaseService) {}
+
+  async onModuleInit() {
+    await seedStrategies(this.db);
+  }
 
   async getStrategies(sort?: string) {
     const orderBy: Record<string, unknown>[] = [{ isPublished: 'desc' }];
@@ -25,7 +30,7 @@ export class MarketplaceService {
         orderBy.push({ downloads: 'desc' });
     }
 
-    return this.db.marketplaceStrategy.findMany({
+    const all = await this.db.marketplaceStrategy.findMany({
       where: { isPublished: true },
       orderBy,
       include: {
@@ -34,6 +39,29 @@ export class MarketplaceService {
         },
       },
     });
+
+    const bestRoi = await this.db.marketplaceStrategy.findMany({
+      where: { isPublished: true },
+      orderBy: { totalROI: 'desc' },
+      take: 6,
+      include: {
+        strategy: {
+          select: { type: true, config: true },
+        },
+      },
+    });
+
+    const fastestGrowing = await this.db.marketplaceStrategy.findMany({
+      where: { isPublished: true, fastestGrowing: true },
+      orderBy: { downloads: 'desc' },
+      include: {
+        strategy: {
+          select: { type: true, config: true },
+        },
+      },
+    });
+
+    return { all, bestRoi, fastestGrowing };
   }
 
   async getBestRoi() {

@@ -7,14 +7,29 @@
 
   <section class="form-section">
     <h2>Run Backtest</h2>
+
+    <div class="date-shortcuts">
+      <span class="shortcut-label">Period:</span>
+      <button class="btn btn-sm" [class.btn-active]="selectedShortcut === '1'" (click)="setDateShortcut(1)">1M</button>
+      <button class="btn btn-sm" [class.btn-active]="selectedShortcut === '3'" (click)="setDateShortcut(3)">3M</button>
+      <button class="btn btn-sm" [class.btn-active]="selectedShortcut === '6'" (click)="setDateShortcut(6)">6M</button>
+      <button class="btn btn-sm" [class.btn-active]="selectedShortcut === '12'" (click)="setDateShortcut(12)">1Y</button>
+    </div>
+
     <div class="backtest-form">
       <div class="form-group">
         <label>Asset</label>
-        <input [(ngModel)]="form.asset" placeholder="e.g. BTCUSDT" />
+        <select [(ngModel)]="form.asset">
+          <option value="" disabled>Select asset</option>
+          <option *ngFor="let s of symbols" [value]="s">{{ s }}</option>
+        </select>
       </div>
       <div class="form-group">
         <label>Timeframe</label>
-        <input [(ngModel)]="form.timeframe" placeholder="e.g. 1h" />
+        <select [(ngModel)]="form.timeframe">
+          <option value="" disabled>Select timeframe</option>
+          <option *ngFor="let tf of timeframes" [value]="tf.value">{{ tf.label }}</option>
+        </select>
       </div>
       <div class="form-group">
         <label>Start Date</label>
@@ -30,10 +45,13 @@
       </div>
       <div class="form-group">
         <label>Strategy</label>
-        <input [(ngModel)]="form.strategy" placeholder="Strategy name" />
+        <select [(ngModel)]="form.strategyId">
+          <option value="" disabled>Select strategy</option>
+          <option *ngFor="let st of strategies" [value]="st.id">{{ st.name }}</option>
+        </select>
       </div>
       <div class="form-actions">
-        <button class="btn btn-primary" (click)="runBacktest()" [disabled]="running">
+        <button class="btn btn-primary" (click)="runBacktest()" [disabled]="running || loadingData">
           {{ running ? 'Running...' : 'Run Backtest' }}
         </button>
       </div>
@@ -66,6 +84,13 @@
         <span class="result-value">{{ result.totalTrades }}</span>
       </div>
     </div>
+
+    <div class="chart-section" *ngIf="result.equityCurve?.length">
+      <h3>Equity Curve</h3>
+      <div class="chart-container">
+        <canvas #chartCanvas></canvas>
+      </div>
+    </div>
   </section>
 
   <section class="history-section">
@@ -87,7 +112,7 @@
         <tbody>
           <tr *ngFor="let run of previousRuns">
             <td>{{ run.asset }}</td>
-            <td>{{ run.strategy }}</td>
+            <td>{{ strategyName(run.strategyId) }}</td>
             <td [class.positive]="run.totalReturn >= 0" [class.negative]="run.totalReturn < 0">{{ run.totalReturn }}%</td>
             <td>{{ run.sharpeRatio }}</td>
             <td class="negative">{{ run.maxDrawdown }}%</td>

@@ -1,0 +1,34 @@
+{
+  "name": "@trading-bots/engine",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@trading-bots/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "nx": {
+    "name": "engine",
+    "targets": {
+      "build": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "tsc --build tsconfig.lib.json",
+          "cwd": "packages/engine"
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "@trading-bots/shared-types": "*",
+    "tslib": "^2.3.0"
+  }
+}

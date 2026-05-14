@@ -4,21 +4,16 @@
   "license": "MIT",
   "scripts": {
     "nx": "nx",
-    "docker:build": "docker compose build",
-    "docker:up": "docker compose up -d",
-    "docker:down": "docker compose down",
+    "docker": "docker compose up -d --build",
     "prisma:generate": "prisma generate --schema=packages/database/prisma/schema.prisma",
     "prisma:migrate": "prisma migrate dev --schema=packages/database/prisma/schema.prisma",
     "prisma:push": "prisma db push --schema=packages/database/prisma/schema.prisma",
     "prisma:studio": "prisma studio --schema=packages/database/prisma/schema.prisma",
-    "start:api": "nx serve api-gateway",
-    "start:worker": "nx serve bot-worker",
-    "start:backtester": "nx serve backtester",
-    "start:analytics": "nx serve analytics",
-    "start:marketplace": "nx serve marketplace",
-    "start:dashboard": "nx serve dashboard",
-    "start:all": "nx run-many --target=serve --all",
-    "build:all": "nx run-many --target=build --all"
+    "build": "npx nx run-many --target=build --all",
+    "dev:db": "docker compose up -d postgres",
+    "dev:back": "npx nx run-many --target=serve --projects=api-gateway,bot-worker,backtester,analytics,marketplace",
+    "dev:front": "npx nx serve dashboard",
+    "dev": "npm run dev:db && npx nx run-many --target=serve --all"
   },
   "private": true,
   "devDependencies": {
@@ -71,6 +66,7 @@
     "packages/*"
   ],
   "dependencies": {
+    "@angular/animations": "~21.2.0",
     "@angular/common": "~21.2.0",
     "@angular/compiler": "~21.2.0",
     "@angular/core": "~21.2.0",

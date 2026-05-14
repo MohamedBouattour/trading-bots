@@ -5,6 +5,21 @@ import { BacktesterService } from './backtester.service';
 export class AppController {
   constructor(private readonly backtesterService: BacktesterService) {}
 
+  @Get('symbols')
+  getSymbols() {
+    return this.backtesterService.getAvailableSymbols();
+  }
+
+  @Get('timeframes')
+  getTimeframes() {
+    return this.backtesterService.getAvailableTimeframes();
+  }
+
+  @Get('strategies')
+  getStrategies() {
+    return this.backtesterService.getAvailableStrategies();
+  }
+
   @Post()
   runBacktest(
     @Body() body: { strategyId: string; asset: string; timeframe: string; startDate: string; endDate: string; initialBalance: number }

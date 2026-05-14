@@ -17,4 +17,6 @@ WORKDIR /app/packages/${SERVICE}
 
 EXPOSE ${PORT}
 
+COPY packages/marketplace/docker-seed.js ./docker-seed.js
+
 CMD ["node", "dist/main.js"]

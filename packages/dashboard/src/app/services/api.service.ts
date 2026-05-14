@@ -6,6 +6,7 @@ import { Observable } from 'rxjs';
 export class ApiService {
   private http = inject(HttpClient);
   private apiBase = 'http://localhost:3000/api';
+  private backtesterBase = 'http://localhost:3002/api';
 
   getHealth(): Observable<any> {
     return this.http.get(`${this.apiBase}/health`);
@@ -31,6 +32,14 @@ export class ApiService {
     return this.http.delete(`${this.apiBase}/bots/${id}`);
   }
 
+  startBot(id: string): Observable<any> {
+    return this.http.patch(`${this.apiBase}/bots/${id}`, { active: true });
+  }
+
+  stopBot(id: string): Observable<any> {
+    return this.http.patch(`${this.apiBase}/bots/${id}`, { active: false });
+  }
+
   getTrades(botId?: string): Observable<any> {
     const params = botId ? { botId } : undefined;
     return this.http.get(`${this.apiBase}/trades`, { params });
@@ -41,16 +50,32 @@ export class ApiService {
     return this.http.get(`${this.apiBase}/logs`, { params });
   }
 
+  getSymbols(): Observable<string[]> {
+    return this.http.get<string[]>(`${this.backtesterBase}/backtest/symbols`);
+  }
+
+  getTimeframes(): Observable<{ value: string; label: string }[]> {
+    return this.http.get<{ value: string; label: string }[]>(`${this.backtesterBase}/backtest/timeframes`);
+  }
+
+  getBacktestStrategies(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.backtesterBase}/backtest/strategies`);
+  }
+
   runBacktest(data: any): Observable<any> {
-    return this.http.post(`${this.apiBase}/backtest`, data);
+    return this.http.post(`${this.backtesterBase}/backtest`, data);
   }
 
   getBacktestResult(id: string): Observable<any> {
-    return this.http.get(`${this.apiBase}/backtest/${id}`);
+    return this.http.get(`${this.backtesterBase}/backtest/${id}`);
   }
 
   getBacktestRuns(): Observable<any> {
-    return this.http.get(`${this.apiBase}/backtest`);
+    return this.http.get(`${this.backtesterBase}/backtest`);
+  }
+
+  getBacktestEquityCurve(id: string): Observable<any> {
+    return this.http.get(`${this.backtesterBase}/backtest/${id}/equity-curve`);
   }
 
   getAnalyticsOverview(): Observable<any> {

@@ -2,7 +2,8 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { DatabaseService } from '@trading-bots/database';
 import { BybitClientService } from '@trading-bots/bybit-client';
-import { Candle, Trade, BacktestResult, StrategyType } from '@trading-bots/shared-types';
+import { StrategyEngine } from '@trading-bots/engine';
+import { Candle, Trade, BacktestResult } from '@trading-bots/shared-types';
 
 interface Position {
   size: number;
@@ -13,11 +14,28 @@ interface Position {
 @Injectable()
 export class BacktesterService {
   private readonly feeRate = 0.0004;
+  private readonly engine = new StrategyEngine();
 
   constructor(
     private readonly db: DatabaseService,
     private readonly bybitClient: BybitClientService,
   ) {}
+
+  async getAvailableSymbols(): Promise<string[]> {
+    return this.bybitClient.getSymbols();
+  }
+
+  getAvailableTimeframes() {
+    const tf = this.bybitClient.getTimeframes();
+    return tf.map(t => ({ value: t, label: this.bybitClient.getTimeframeLabel(t) }));
+  }
+
+  async getAvailableStrategies() {
+    return this.db.strategy.findMany({
+      where: { isPublic: true },
+      select: { id: true, name: true, description: true, type: true, config: true },
+    });
+  }
 
   async runBacktest(dto: {
     strategyId: string;
@@ -50,6 +68,12 @@ export class BacktesterService {
         },
         orderBy: { timestamp: 'asc' },
       });
+
+      if (candles.length === 0) {
+        const startMs = new Date(startDate).getTime();
+        const endMs = new Date(endDate).getTime();
+        candles = await this.bybitClient.getKlineRange(asset, timeframe, startMs, endMs);
+      }
 
       if (candles.length === 0) {
         candles = await this.bybitClient.getKline(asset, timeframe, 200);
@@ -97,7 +121,10 @@ export class BacktesterService {
   }
 
   async listBacktestRuns() {
-    return this.db.backtestRun.findMany({ orderBy: { createdAt: 'desc' } });
+    return this.db.backtestRun.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: { strategy: { select: { name: true, type: true } } },
+    });
   }
 
   async getEquityCurve(id: string) {
@@ -123,43 +150,18 @@ export class BacktesterService {
     let peak = initialBalance;
     let maxDrawdown = 0;
 
-    const type = strategyType as StrategyType;
-
     for (let i = 0; i < candles.length; i++) {
       const candle = candles[i];
       const slice = candles.slice(0, i + 1);
 
-      let signal: 'buy' | 'sell' | 'hold' = 'hold';
+      const signal = this.engine.getSignal(slice, strategyType, config);
 
-      if (type === 'ma_crossover') {
-        const fastPeriod = (config.fastPeriod as number) ?? 10;
-        const slowPeriod = (config.slowPeriod as number) ?? 30;
-        if (i >= slowPeriod) {
-          const fastSma = this.sma(candles, i, fastPeriod);
-          const slowSma = this.sma(candles, i, slowPeriod);
-          const prevFast = this.sma(candles, i - 1, fastPeriod);
-          const prevSlow = this.sma(candles, i - 1, slowPeriod);
-          if (prevFast <= prevSlow && fastSma > slowSma) signal = 'buy';
-          else if (prevFast >= prevSlow && fastSma < slowSma) signal = 'sell';
-        }
-      } else if (type === 'rsi') {
-        const rsiPeriod = (config.rsiPeriod as number) ?? 14;
-        const oversold = (config.oversold as number) ?? 30;
-        const overbought = (config.overbought as number) ?? 70;
-        if (i >= rsiPeriod + 1) {
-          const rsi = this.bybitClient.calculateRSI(slice, rsiPeriod);
-          const prevRsi = this.bybitClient.calculateRSI(candles.slice(0, i), rsiPeriod);
-          if (prevRsi <= oversold && rsi > oversold) signal = 'buy';
-          else if (prevRsi >= overbought && rsi < overbought) signal = 'sell';
-        }
-      }
-
-      if (signal === 'buy' && !position) {
+      if (signal.action === 'buy' && !position) {
         const size = balance / candle.close;
         const cost = size * candle.close;
         balance -= cost * this.feeRate;
         position = { size, entryPrice: candle.close, openedAt: candle.timestamp };
-      } else if (signal === 'sell' && position) {
+      } else if (signal.action === 'sell' && position) {
         const value = position.size * candle.close;
         balance += value - value * this.feeRate;
         const pnl = (candle.close - position.entryPrice) * position.size;
@@ -253,10 +255,5 @@ export class BacktesterService {
       }
     }
     return curve;
-  }
-
-  private sma(candles: Candle[], index: number, period: number): number {
-    const slice = candles.slice(index - period + 1, index + 1);
-    return slice.reduce((sum, c) => sum + c.close, 0) / period;
   }
 }

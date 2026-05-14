@@ -49,7 +49,7 @@ export class AnalyticsComponent implements OnInit {
   }
 
   loadTradeHistory() {
-    this.api.getTradeHistory(this.tradeFilter).subscribe({
+    this.api.getTradesAnalytics(this.tradeFilter).subscribe({
       next: (res: any) => (this.tradeHistory = res),
       error: () => (this.error = 'Failed to load trade history'),
     });

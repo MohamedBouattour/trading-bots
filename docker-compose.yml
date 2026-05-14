@@ -120,6 +120,24 @@ services:
     networks:
       - trading-network
 
+  seed:
+    build:
+      context: .
+      dockerfile: Dockerfile.service
+      args:
+        SERVICE: marketplace
+        PORT: 3004
+    container_name: trading-bots-seed
+    entrypoint: ["node", "docker-seed.js"]
+    environment:
+      DATABASE_URL: postgresql://trading:trading_pass@postgres:5432/trading_bots
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - trading-network
+    restart: "no"
+
   frontend:
     build:
       context: .
