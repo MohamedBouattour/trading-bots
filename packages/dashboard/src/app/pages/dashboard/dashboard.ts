@@ -15,10 +15,10 @@ export class DashboardComponent implements OnInit {
   private api = inject(ApiService);
 
   stats = [
-    { label: 'Total Bots', value: 0, icon: '🤖' },
-    { label: 'Active Bots', value: 0, icon: '⚡' },
-    { label: 'Total Trades', value: 0, icon: '📊' },
-    { label: 'Total PnL', value: 0, icon: '💰' },
+    { label: 'Total Bots', value: 0 },
+    { label: 'Active Bots', value: 0 },
+    { label: 'Total Trades', value: 0 },
+    { label: 'Total PnL', value: 0 },
   ];
 
   recentActivity: any[] = [];

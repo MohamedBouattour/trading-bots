@@ -1,22 +1,52 @@
 <div class="sidebar">
   <div class="sidebar-header">
-    <h2>Trading Bots</h2>
+    <div class="sidebar-logo">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+      </svg>
+    </div>
+    <span class="sidebar-brand">Trading Bots</span>
   </div>
   <nav class="sidebar-nav">
     <a routerLink="/dashboard" routerLinkActive="active" [routerLinkActiveOptions]="{exact:true}">
-      <span class="nav-icon">&#9632;</span> Dashboard
+      <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="7" height="7"></rect>
+        <rect x="14" y="3" width="7" height="7"></rect>
+        <rect x="14" y="14" width="7" height="7"></rect>
+        <rect x="3" y="14" width="7" height="7"></rect>
+      </svg>
+      <span>Dashboard</span>
     </a>
     <a routerLink="/bots" routerLinkActive="active">
-      <span class="nav-icon">&#9881;</span> Bots
+      <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+      </svg>
+      <span>Bots</span>
     </a>
     <a routerLink="/backtesting" routerLinkActive="active">
-      <span class="nav-icon">&#8635;</span> Backtesting
+      <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+      </svg>
+      <span>Backtesting</span>
     </a>
     <a routerLink="/analytics" routerLinkActive="active">
-      <span class="nav-icon">&#128200;</span> Analytics
+      <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="12" y1="20" x2="12" y2="10"></line>
+        <line x1="18" y1="20" x2="18" y2="4"></line>
+        <line x1="6" y1="20" x2="6" y2="16"></line>
+      </svg>
+      <span>Analytics</span>
     </a>
     <a routerLink="/marketplace" routerLinkActive="active">
-      <span class="nav-icon">&#9733;</span> Marketplace
+      <svg class="nav-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"></circle>
+        <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon>
+      </svg>
+      <span>Marketplace</span>
     </a>
   </nav>
+  <div class="sidebar-footer">
+    <span class="sidebar-version">v1.0.0</span>
+  </div>
 </div>

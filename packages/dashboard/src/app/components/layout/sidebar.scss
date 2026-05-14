@@ -1,55 +1,94 @@
 .sidebar {
-  width: 250px;
-  min-width: 250px;
-  background: #1e1e2d;
-  color: #a2a3b7;
+  width: 260px;
+  min-width: 260px;
+  background: var(--bg-sidebar);
+  color: var(--text-sidebar);
   display: flex;
   flex-direction: column;
   height: 100vh;
+  position: sticky;
+  top: 0;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .sidebar-header {
-  padding: 24px 20px;
-  border-bottom: 1px solid #2a2a3d;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.sidebar-header h2 {
-  margin: 0;
-  font-size: 18px;
+.sidebar-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--primary), #7c3aed);
   color: #fff;
-  font-weight: 600;
+}
+
+.sidebar-brand {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-sidebar-active);
+  letter-spacing: -0.3px;
 }
 
 .sidebar-nav {
   display: flex;
   flex-direction: column;
-  padding: 16px 0;
+  padding: 12px 8px;
+  flex: 1;
 }
 
 .sidebar-nav a {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 20px;
-  color: #a2a3b7;
+  padding: 10px 12px;
+  margin: 1px 0;
+  color: var(--text-sidebar);
   text-decoration: none;
   font-size: 14px;
-  transition: all 0.2s;
+  font-weight: 500;
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+
+  .nav-icon {
+    flex-shrink: 0;
+    opacity: 0.7;
+    transition: opacity var(--transition-fast);
+  }
 }
 
 .sidebar-nav a:hover {
-  background: #2a2a3d;
-  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-sidebar-active);
+
+  .nav-icon {
+    opacity: 1;
+  }
 }
 
 .sidebar-nav a.active {
-  background: #2a2a3d;
-  color: #fff;
-  border-left: 3px solid #5867dd;
+  background: rgba(79, 70, 229, 0.15);
+  color: var(--text-sidebar-active);
+
+  .nav-icon {
+    opacity: 1;
+    color: var(--primary-light);
+  }
 }
 
-.nav-icon {
-  font-size: 16px;
-  width: 20px;
-  text-align: center;
+.sidebar-footer {
+  padding: 16px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.sidebar-version {
+  font-size: 12px;
+  color: var(--text-muted);
 }

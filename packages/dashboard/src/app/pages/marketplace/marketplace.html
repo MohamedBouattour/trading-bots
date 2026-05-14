@@ -1,6 +1,9 @@
 <div class="marketplace-page">
   <header class="page-header">
-    <h1>Marketplace</h1>
+    <div>
+      <h1>Marketplace</h1>
+      <p class="page-subtitle">Discover and publish trading strategies</p>
+    </div>
     <button class="btn btn-primary" (click)="showPublishForm = !showPublishForm">
       {{ showPublishForm ? 'Cancel' : '+ Publish Strategy' }}
     </button>
@@ -21,55 +24,64 @@
   </section>
 
   <div class="sort-bar">
-    <span>Sort by:</span>
+    <span class="sort-label">Sort by:</span>
     <button class="btn btn-sm" [class.btn-active]="sortField === 'monthlyROI'" (click)="sortBy('monthlyROI')">Monthly ROI</button>
     <button class="btn btn-sm" [class.btn-active]="sortField === 'totalROI'" (click)="sortBy('totalROI')">Total ROI</button>
     <button class="btn btn-sm" [class.btn-active]="sortField === 'popularity'" (click)="sortBy('popularity')">Popularity</button>
   </div>
 
-  <section class="section">
+  <section class="section-card">
     <h2>All Strategies</h2>
     <div class="cards-grid" *ngIf="allStrategies.length; else emptyState">
-      <div class="strategy-card" *ngFor="let s of allStrategies; trackBy: trackById">
-        <h3>{{ s.name }}</h3>
+      <div class="strategy-card" *ngFor="let s of allStrategies; trackBy: trackById" (click)="openStrategy(s)">
+        <div class="card-top">
+          <h3>{{ s.name }}</h3>
+          <span class="card-type-badge">{{ s.strategy?.type }}</span>
+        </div>
         <p class="author">by {{ s.author }}</p>
+        <p class="card-desc">{{ s.description }}</p>
         <div class="card-stats">
-          <span class="stat" [class.positive]="s.monthlyROI >= 0" [class.negative]="s.monthlyROI < 0">ROI: {{ s.monthlyROI }}%</span>
-          <span class="stat">Popularity: {{ s.popularity }}</span>
-          <span class="stat">Downloads: {{ s.downloads }}</span>
-          <span class="stat">Rating: {{ s.rating }}/5</span>
+          <span class="stat" [class.positive]="s.monthlyROI >= 0" [class.negative]="s.monthlyROI < 0">ROI {{ s.monthlyROI }}%</span>
+          <span class="stat">{{ s.downloads }} downloads</span>
+          <span class="stat">{{ s.rating }} rating</span>
         </div>
       </div>
     </div>
   </section>
 
-  <section class="section">
+  <section class="section-card">
     <h2>Best ROI</h2>
     <div class="cards-grid" *ngIf="bestRoi.length; else emptyState">
-      <div class="strategy-card" *ngFor="let s of bestRoi; trackBy: trackById">
-        <h3>{{ s.name }}</h3>
+      <div class="strategy-card" *ngFor="let s of bestRoi; trackBy: trackById" (click)="openStrategy(s)">
+        <div class="card-top">
+          <h3>{{ s.name }}</h3>
+          <span class="card-type-badge">{{ s.strategy?.type }}</span>
+        </div>
         <p class="author">by {{ s.author }}</p>
+        <p class="card-desc">{{ s.description }}</p>
         <div class="card-stats">
-          <span class="stat positive">ROI: {{ s.monthlyROI }}%</span>
-          <span class="stat">Popularity: {{ s.popularity }}</span>
-          <span class="stat">Downloads: {{ s.downloads }}</span>
-          <span class="stat">Rating: {{ s.rating }}/5</span>
+          <span class="stat positive">ROI {{ s.monthlyROI }}%</span>
+          <span class="stat">{{ s.downloads }} downloads</span>
+          <span class="stat">{{ s.rating }} rating</span>
         </div>
       </div>
     </div>
   </section>
 
-  <section class="section">
+  <section class="section-card">
     <h2>Fastest Growing</h2>
     <div class="cards-grid" *ngIf="fastestGrowing.length; else emptyState">
-      <div class="strategy-card" *ngFor="let s of fastestGrowing; trackBy: trackById">
-        <h3>{{ s.name }}</h3>
+      <div class="strategy-card" *ngFor="let s of fastestGrowing; trackBy: trackById" (click)="openStrategy(s)">
+        <div class="card-top">
+          <h3>{{ s.name }}</h3>
+          <span class="card-type-badge">{{ s.strategy?.type }}</span>
+        </div>
         <p class="author">by {{ s.author }}</p>
+        <p class="card-desc">{{ s.description }}</p>
         <div class="card-stats">
-          <span class="stat" [class.positive]="s.monthlyROI >= 0" [class.negative]="s.monthlyROI < 0">ROI: {{ s.monthlyROI }}%</span>
-          <span class="stat">Popularity: {{ s.popularity }}</span>
-          <span class="stat">Downloads: {{ s.downloads }}</span>
-          <span class="stat">Rating: {{ s.rating }}/5</span>
+          <span class="stat" [class.positive]="s.monthlyROI >= 0" [class.negative]="s.monthlyROI < 0">ROI {{ s.monthlyROI }}%</span>
+          <span class="stat">{{ s.downloads }} downloads</span>
+          <span class="stat">{{ s.rating }} rating</span>
         </div>
       </div>
     </div>
@@ -78,4 +90,67 @@
   <ng-template #emptyState>
     <p class="empty-state">No strategies found</p>
   </ng-template>
+</div>
+
+<div class="modal-overlay" *ngIf="selectedStrategy" (click)="closeStrategy()">
+  <div class="modal-content" (click)="$event.stopPropagation()">
+    <button class="modal-close" (click)="closeStrategy()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+      </svg>
+    </button>
+
+    <h2>{{ selectedStrategy.name }}</h2>
+    <p class="modal-author">by {{ selectedStrategy.author }}</p>
+    <span class="modal-type-badge">{{ selectedStrategy.strategy?.type }}</span>
+
+    <div class="modal-body">
+      <div class="modal-summary">
+        <h3>How it works</h3>
+        <p>{{ getLogic(selectedStrategy).summary }}</p>
+      </div>
+
+      <div class="modal-kid">
+        <h3>For beginners</h3>
+        <p>{{ getLogic(selectedStrategy).kidFriendly }}</p>
+      </div>
+
+      <div class="modal-conditions">
+        <div class="condition-card entry">
+          <div class="condition-dot entry-dot"></div>
+          <div>
+            <strong>Buy when</strong>
+            <p>{{ getLogic(selectedStrategy).entryCondition }}</p>
+          </div>
+        </div>
+        <div class="condition-card exit">
+          <div class="condition-dot exit-dot"></div>
+          <div>
+            <strong>Sell when</strong>
+            <p>{{ getLogic(selectedStrategy).exitCondition }}</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-indicators" *ngIf="getLogic(selectedStrategy).indicators?.length">
+        <h3>What we look at</h3>
+        <div class="indicator-list">
+          <div class="indicator-item" *ngFor="let ind of getLogic(selectedStrategy).indicators">
+            <div>
+              <strong>{{ ind.name }}</strong>
+              <p>{{ ind.what }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-diagram" *ngIf="getLogic(selectedStrategy).diagramSteps?.length">
+        <h3>Decision flow</h3>
+        <div class="diagram-container">
+          <canvas #diagramCanvas></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>

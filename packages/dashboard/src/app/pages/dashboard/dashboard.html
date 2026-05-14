@@ -1,6 +1,9 @@
 <div class="dashboard">
   <header class="dashboard-header">
-    <h1>Dashboard</h1>
+    <div>
+      <h1>Dashboard</h1>
+      <p class="dashboard-subtitle">Overview of your trading operations</p>
+    </div>
     <span class="health-badge" [class.online]="health.status === 'ok'">
       {{ health.status === 'ok' ? 'API Online' : 'API Offline' }}
     </span>
@@ -12,7 +15,6 @@
 
   <div class="stats-grid">
     <div class="stat-card" *ngFor="let stat of stats">
-      <span class="stat-icon">{{ stat.icon }}</span>
       <div class="stat-info">
         <span class="stat-value">{{ stat.value }}</span>
         <span class="stat-label">{{ stat.label }}</span>
@@ -20,7 +22,7 @@
     </div>
   </div>
 
-  <section class="recent-activity">
+  <section class="section-card">
     <h2>Recent Activity</h2>
     <div class="activity-list" *ngIf="recentActivity.length; else noActivity">
       <div class="activity-item" *ngFor="let item of recentActivity">
