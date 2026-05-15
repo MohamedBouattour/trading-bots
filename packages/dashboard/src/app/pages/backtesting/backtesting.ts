@@ -40,6 +40,7 @@ export class BacktestingComponent implements OnInit, AfterViewChecked {
   private needsChartRender = false;
 
   ngOnInit() {
+    this.setDateShortcut(3);
     this.loadInitialData();
   }
 

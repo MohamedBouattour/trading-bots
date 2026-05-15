@@ -6,7 +6,7 @@ import { Observable } from 'rxjs';
 export class ApiService {
   private http = inject(HttpClient);
   private apiBase = 'http://localhost:3000/api';
-  private backtesterBase = 'http://localhost:3002/api';
+  private backtesterBase = 'http://localhost:3000/api';
 
   getHealth(): Observable<any> {
     return this.http.get(`${this.apiBase}/health`);
